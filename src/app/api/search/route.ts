@@ -329,10 +329,26 @@ export async function GET(req: NextRequest) {
             continue;
           }
 
-          // 3) Remove entries with very short/generic names (< 3 chars or just numbers)
+          // 3) Remove entries with very short/generic names, IDs, or generic patterns
           if (nameLower.length < 3 || /^\d+$/.test(nameLower)) {
             allListings.splice(i, 1);
             continue;
+          }
+
+          // 3b) Clean up names: remove trailing hash IDs, fix duplicates
+          if (l.name) {
+            // Remove trailing hash/database IDs (e.g. "Quicksilver 525 B995yjk" → "Quicksilver 525")
+            l.name = l.name.replace(/\s+[A-Za-z0-9]{5,8}$/g, "").trim();
+            // Remove duplicate brand prefix ("Bavaria Bavaria 44" → "Bavaria 44")
+            const words = l.name.split(" ");
+            if (words.length >= 3 && words[0].toLowerCase() === words[1].toLowerCase()) {
+              l.name = words.slice(1).join(" ");
+            }
+          }
+
+          // 3c) Demote generic sitemap names ("Segelboot Dubrovnik #19892")
+          if (/^(Segelboot|Motorboot|Katamaran|Schlauchboot|Hausboot)\s+\S+\s+#\d+$/i.test(l.name || "")) {
+            l.match_score = Math.min(l.match_score, 0.4);
           }
 
           // 4) BOAT TYPE enforcement — if user asked for "motor", remove sailing boats
@@ -345,13 +361,23 @@ export async function GET(req: NextRequest) {
 
           // 5) Budget enforcement — hard filter + demote unknown prices
           if (parsed.budget_per_day) {
-            if (l.price_per_day) {
-              if (l.price_per_day > parsed.budget_per_day * 1.3) {
+            // Detect half-day / hourly pricing described as "per day"
+            const desc = `${l.description || ""} ${l.ai_summary || ""}`.toLowerCase();
+            let effectiveDayPrice = l.price_per_day;
+            if (effectiveDayPrice && /half.?day|halber?\s*tag|demi/i.test(desc)) {
+              effectiveDayPrice = effectiveDayPrice * 2; // half-day → full day
+            }
+            if (effectiveDayPrice && /per\s*hour|pro\s*stunde|\/\s*h\b/i.test(desc)) {
+              effectiveDayPrice = effectiveDayPrice * 8; // hourly → ~8h day
+            }
+
+            if (effectiveDayPrice) {
+              if (effectiveDayPrice > parsed.budget_per_day * 1.3) {
                 allListings.splice(i, 1);
                 continue;
               }
               // Boost boats clearly within budget
-              if (l.price_per_day <= parsed.budget_per_day) {
+              if (effectiveDayPrice <= parsed.budget_per_day) {
                 l.match_score = Math.max(l.match_score, 0.85);
               }
             } else {

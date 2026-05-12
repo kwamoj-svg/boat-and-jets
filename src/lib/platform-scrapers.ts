@@ -695,7 +695,8 @@ async function scrapeClickAndBoatSitemap(location: string, boatType?: string): P
       const imgMatch = block.match(/<image:loc>(https:\/\/[^<]+)<\/image:loc>/);
       const imageUrl = imgMatch ? imgMatch[1] : undefined;
 
-      const cleanSlug = decodeURIComponent(nameSlug).replace(/-[a-z0-9]{4,6}$/, "");
+      // Remove trailing hash IDs (e.g. "-x6g83", "-vj6bwp5", "-b995yjk")
+      const cleanSlug = decodeURIComponent(nameSlug).replace(/-[a-z0-9]{4,8}$/, "");
       const name = cleanSlug.split("-").map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
       const cityName = decodeURIComponent(city).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
       const type = typeSlug.includes("segel") ? "sailing" : typeSlug.includes("katamaran") ? "catamaran" : typeSlug.includes("schlauchboot") ? "speedboat" : "motor";
