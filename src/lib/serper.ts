@@ -54,6 +54,7 @@ export function buildSearchQueries(parsed: {
   intent: string;
   region?: string;
   country?: string;
+  city?: string;
   boat_type?: string;
   budget_max?: number;
   budget_per_day?: number;
@@ -63,31 +64,34 @@ export function buildSearchQueries(parsed: {
   style?: string;
   keywords?: string[];
   raw: string;
+  optimized_search_query?: string;
 }): string[] {
   const queries: string[] = [];
-  const loc = parsed.country || parsed.region || "";
+  const loc = [parsed.city, parsed.country, parsed.region].filter(Boolean).join(" ");
   const type = parsed.boat_type || "yacht";
   const cur = parsed.currency || "€";
   const budget = parsed.budget_per_day
     ? `under ${cur}${parsed.budget_per_day} per day`
     : parsed.budget_max ? `under ${cur}${parsed.budget_max}` : "";
   const guests = parsed.guests ? `${parsed.guests} guests` : "";
-  const intent = parsed.intent === "buy" ? "for sale" : "charter";
+  const intent = parsed.intent === "buy" ? "for sale" : "charter rental";
 
-  // 1: Raw query
-  queries.push(parsed.raw);
+  // 1: AI-optimized query (best quality)
+  if (parsed.optimized_search_query) {
+    queries.push(parsed.optimized_search_query);
+  }
 
-  // 2: Structured EN
-  queries.push(`${type} ${intent} ${loc} ${budget} ${guests} 2025 2026`.trim());
+  // 2: Structured EN with location emphasis
+  queries.push(`${type} ${intent} ${loc} ${budget} ${guests} book online`.trim());
 
-  // 3: Listing-focused (excludes blogs/articles)
-  queries.push(`"${type}" "${loc}" ${intent} ${guests} price cabins -blog -news -article`.trim());
+  // 3: Platform-specific with location
+  queries.push(`${type} ${loc} ${intent} price per day week -tour -excursion -school -ferry`.trim());
 
-  // 4: German
+  // 4: German query
   const intentDE = parsed.intent === "buy" ? "kaufen" : "chartern mieten";
-  queries.push(`${type} ${intentDE} ${loc} ${budget} ${guests} Preis`.trim());
+  queries.push(`${type} ${intentDE} ${loc} ${budget} ${guests} buchen`.trim());
 
-  // 5-7: Platform groups (3 groups, 8 per group)
+  // 5-7: Platform groups (3 groups)
   for (let i = 0; i < 3; i++) {
     const group = PLATFORMS.slice(i * 12, (i + 1) * 12)
       .slice(0, 8)
@@ -96,17 +100,19 @@ export function buildSearchQueries(parsed: {
     queries.push(`(${group}) ${type} ${loc} ${intent}`.trim());
   }
 
-  // 8: Best/comparison query
-  queries.push(`best ${type} ${intent} ${loc} ${guests} ${budget} top`.trim());
+  // 8: Specific rental platforms + location
+  queries.push(`"${loc}" ${type} ${intent} ${guests} ${budget} book`.trim());
 
   // 9: Style if given
   if (parsed.style) {
     queries.push(`${parsed.style} ${type} ${intent} ${loc} ${guests}`.trim());
   }
 
-  // 10: Budget focused
+  // 10: Budget or comparison
   if (parsed.budget_max) {
     queries.push(`affordable ${type} ${intent} ${loc} ${budget} ${guests}`.trim());
+  } else {
+    queries.push(`best ${type} ${intent} ${loc} ${guests} top rated`.trim());
   }
 
   return queries.filter(q => q.length > 10).slice(0, 10);

@@ -7,6 +7,7 @@ interface ParsedQuery {
   intent?: string;
   region?: string;
   country?: string;
+  city?: string;
   budget_max?: number;
   budget_per_day?: number;
   currency?: string;
@@ -21,6 +22,7 @@ export function QueryInsight({ parsed }: { parsed: ParsedQuery }) {
   const tags: { icon: React.ReactNode; label: string }[] = [];
 
   if (parsed.intent) tags.push({ icon: <Target className="w-3.5 h-3.5" />, label: parsed.intent });
+  if (parsed.city) tags.push({ icon: <MapPin className="w-3.5 h-3.5" />, label: parsed.city });
   if (parsed.country) tags.push({ icon: <MapPin className="w-3.5 h-3.5" />, label: parsed.country });
   if (parsed.region && !parsed.country) tags.push({ icon: <MapPin className="w-3.5 h-3.5" />, label: parsed.region });
   if (parsed.boat_type) tags.push({ icon: <Ship className="w-3.5 h-3.5" />, label: parsed.boat_type });

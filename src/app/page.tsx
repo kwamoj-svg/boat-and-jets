@@ -1,11 +1,15 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { Logo } from "@/components/Logo";
 import { SearchInput } from "@/components/SearchInput";
 import { SuggestionChips } from "@/components/SuggestionChips";
 import { Waves, Shield, Sparkles, Globe } from "lucide-react";
 
 export default function Home() {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const handleDropdown = useCallback((open: boolean) => setDropdownOpen(open), []);
+
   return (
     <main className="relative min-h-screen flex flex-col">
       {/* Background layers */}
@@ -33,12 +37,12 @@ export default function Home() {
             className="animate-fade-in"
             style={{ animationDelay: "0.3s", opacity: 0 }}
           >
-            <SearchInput size="large" autoFocus />
+            <SearchInput size="large" autoFocus onDropdownChange={handleDropdown} />
           </div>
 
           <div
-            className="animate-fade-in"
-            style={{ animationDelay: "0.45s", opacity: 0 }}
+            className={`animate-fade-in transition-all duration-200 ${dropdownOpen ? "opacity-0 pointer-events-none" : ""}`}
+            style={{ animationDelay: "0.45s", ...(!dropdownOpen ? {} : {}) }}
           >
             <SuggestionChips />
           </div>

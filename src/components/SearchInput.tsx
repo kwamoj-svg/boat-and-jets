@@ -8,6 +8,7 @@ interface SearchInputProps {
   size?: "default" | "large";
   initialValue?: string;
   autoFocus?: boolean;
+  onDropdownChange?: (open: boolean) => void;
 }
 
 // Multilingual example queries — shown as autocomplete suggestions
@@ -54,7 +55,7 @@ const PLACEHOLDERS = [
   "Gulet mieten Türkei 2 Wochen...",
 ];
 
-export function SearchInput({ size = "default", initialValue = "", autoFocus = false }: SearchInputProps) {
+export function SearchInput({ size = "default", initialValue = "", autoFocus = false, onDropdownChange }: SearchInputProps) {
   const [query, setQuery] = useState(initialValue);
   const [focused, setFocused] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -96,6 +97,11 @@ export function SearchInput({ size = "default", initialValue = "", autoFocus = f
 
   // Show trending when focused with empty/short query
   const trendingQueries = EXAMPLE_QUERIES.slice(0, 5);
+
+  const dropdownVisible = showSuggestions && focused && (suggestions.length > 0 || query.length < 2);
+  useEffect(() => {
+    onDropdownChange?.(dropdownVisible);
+  }, [dropdownVisible, onDropdownChange]);
 
   const isLarge = size === "large";
 
