@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchWeb, buildSearchQueries } from "@/lib/serper";
-import { parseUserQuery, extractListingsFromSearchResults } from "@/lib/claude-ai";
+import { searchWeb, buildSearchQueries, fetchPageContent } from "@/lib/serper";
+import {
+  parseUserQuery,
+  extractBoatsFromPages,
+  extractListingsFromSearchResults,
+} from "@/lib/claude-ai";
 
 export const maxDuration = 30;
 
@@ -14,10 +18,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // Stage 1: Parse user query with AI
     const parsed = await parseUserQuery(q);
 
+    // Stage 2: Search the web
     const queries = buildSearchQueries(parsed);
-
     const allResults = await Promise.all(
       queries.map((query) => searchWeb(query, 8))
     );
@@ -29,11 +34,37 @@ export async function GET(req: NextRequest) {
       return true;
     });
 
-    const listings = await extractListingsFromSearchResults(
-      uniqueResults.slice(0, 15),
-      parsed
+    // Stage 3: Fetch top pages and extract real boat data
+    const topPages = uniqueResults.slice(0, 5);
+    const pageContents = await Promise.all(
+      topPages.map(async (r) => {
+        const content = await fetchPageContent(r.link);
+        return { url: r.link, title: r.title, content };
+      })
     );
 
+    const pagesWithContent = pageContents.filter((p) => p.content.length > 200);
+
+    // Stage 4: Extract specific boats from fetched pages
+    let listings = await extractBoatsFromPages(pagesWithContent, parsed);
+
+    // Stage 5: Fallback — also extract from search snippets for more results
+    if (listings.length < 4) {
+      const snippetListings = await extractListingsFromSearchResults(
+        uniqueResults.slice(0, 10),
+        parsed
+      );
+      // Merge, avoiding duplicates by name
+      const existingNames = new Set(listings.map((l) => l.name.toLowerCase()));
+      for (const sl of snippetListings) {
+        if (!existingNames.has(sl.name.toLowerCase())) {
+          listings.push(sl);
+          existingNames.add(sl.name.toLowerCase());
+        }
+      }
+    }
+
+    // Stage 6: Sort by match score
     listings.sort((a, b) => b.match_score - a.match_score);
 
     return NextResponse.json({

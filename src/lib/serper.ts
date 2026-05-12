@@ -44,22 +44,69 @@ export function buildSearchQueries(parsed: {
   style?: string;
 }): string[] {
   const queries: string[] = [];
-  const base = parsed.intent === "buy" ? "yacht for sale" : "yacht charter";
+  const base = parsed.intent === "buy" ? "for sale" : "charter";
   const location = parsed.country || parsed.region || "";
   const type = parsed.boat_type || "yacht";
   const budget = parsed.budget_max
     ? `under ${parsed.currency || "€"}${parsed.budget_max.toLocaleString("en-US")}`
     : "";
   const guests = parsed.guests ? `${parsed.guests} guests` : "";
-  const date = parsed.date || "2026";
 
-  queries.push(`${base} ${type} ${location} ${budget} ${date} price per week`.trim());
+  // Query 1: Specific boat listings on major platforms
+  queries.push(
+    `site:yachtcharterfleet.com OR site:charterworld.com OR site:boatbookings.com ${type} ${base} ${location} ${budget}`.trim()
+  );
 
-  if (location) {
-    queries.push(`best ${type} ${base} ${location} ${guests} ${date}`.trim());
-  }
+  // Query 2: Individual yacht detail pages
+  queries.push(
+    `"${type}" "${base}" "${location}" "per week" ${budget} ${guests} -blog -guide -article`.trim()
+  );
 
-  queries.push(`${location} ${base} listings ${type} ${budget} crewed`.trim());
+  // Query 3: Direct listing search
+  queries.push(
+    `${type} ${base} ${location} ${budget} cabins guests crew price week 2026`.trim()
+  );
 
   return queries;
+}
+
+export async function fetchPageContent(url: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; BoatAndJets/1.0; +https://boat-and-jets.onrender.com)",
+        Accept: "text/html",
+      },
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) return "";
+
+    const html = await res.text();
+
+    // Strip HTML tags, keep text content — lightweight extraction
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+      .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+      .replace(/<header[\s\S]*?<\/header>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&euro;/g, "€")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    // Return first 6000 chars to stay within token limits
+    return text.slice(0, 6000);
+  } catch {
+    return "";
+  }
 }

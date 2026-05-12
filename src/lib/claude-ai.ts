@@ -74,7 +74,9 @@ Return ONLY valid JSON with this exact structure:
 
   const text =
     msg.content[0].type === "text" ? msg.content[0].text : "";
-  const json = JSON.parse(text.replace(/```json?\n?/g, "").replace(/```/g, "").trim());
+  const json = JSON.parse(
+    text.replace(/```json?\n?/g, "").replace(/```/g, "").trim()
+  );
 
   return {
     ...json,
@@ -82,6 +84,90 @@ Return ONLY valid JSON with this exact structure:
     keywords: json.keywords || [],
     raw,
   };
+}
+
+export async function extractBoatsFromPages(
+  pages: { url: string; title: string; content: string }[],
+  parsedQuery: ParsedUserQuery
+): Promise<ExtractedListing[]> {
+  const pagesText = pages
+    .map(
+      (p, i) =>
+        `=== PAGE ${i + 1} ===\nURL: ${p.url}\nTitle: ${p.title}\nContent:\n${p.content}\n`
+    )
+    .join("\n");
+
+  const msg = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 4000,
+    messages: [
+      {
+        role: "user",
+        content: `You are a yacht discovery AI. You are given the text content of yacht listing pages.
+Your job: find SPECIFIC, INDIVIDUAL boats/yachts mentioned on these pages.
+
+USER SEARCH: "${parsedQuery.raw}"
+INTENT: ${parsedQuery.intent}
+BUDGET: ${parsedQuery.budget_max ? `${parsedQuery.currency} ${parsedQuery.budget_max}` : "not specified"}
+LOCATION: ${parsedQuery.country || parsedQuery.region || "not specified"}
+TYPE: ${parsedQuery.boat_type || "any"}
+GUESTS: ${parsedQuery.guests || "not specified"}
+DATE: ${parsedQuery.date || "flexible"}
+
+PAGE CONTENTS:
+${pagesText}
+
+RULES:
+- Extract REAL boat names found in the page text (e.g. "M/Y SERENITY", "Lagoon 52", "Azimut Grande 35")
+- Each result must be a SPECIFIC yacht, not a platform or category
+- The source_url should be the page URL where you found the boat. If the page mentions a specific link to the boat detail page, use that instead.
+- Only include boats that somewhat match the user's search criteria
+- Be accurate with prices, specs, and names — only use data you actually found in the text
+- If a price is listed per day, convert to approximate weekly (x7)
+
+Return ONLY a valid JSON array (max 8 boats):
+[{
+  "name": "actual yacht name from page",
+  "type": "motor|sailing|catamaran|superyacht|speedboat|gulet",
+  "brand": "builder if mentioned",
+  "model": "model if mentioned",
+  "year": 2024,
+  "length_ft": 85,
+  "cabins": 4,
+  "guests": 10,
+  "crew": 3,
+  "price_per_week": 50000,
+  "currency": "EUR",
+  "region": "Mediterranean",
+  "country": "USA",
+  "port": "Miami",
+  "features": ["Jacuzzi", "Jet ski"],
+  "description": "Brief factual description from the page",
+  "source_url": "URL where this specific boat was found",
+  "source_title": "page title",
+  "luxury_level": 4,
+  "match_score": 0.85,
+  "match_reasons": ["Budget match", "Location match"],
+  "ai_summary": "Why this specific boat matches the user's request"
+}]
+
+If you cannot find any specific boats, return an empty array [].`,
+      },
+    ],
+  });
+
+  const text =
+    msg.content[0].type === "text" ? msg.content[0].text : "[]";
+
+  try {
+    const cleaned = text
+      .replace(/```json?\n?/g, "")
+      .replace(/```/g, "")
+      .trim();
+    return JSON.parse(cleaned);
+  } catch {
+    return [];
+  }
 }
 
 export async function extractListingsFromSearchResults(
@@ -101,25 +187,25 @@ export async function extractListingsFromSearchResults(
     messages: [
       {
         role: "user",
-        content: `You are an AI yacht discovery engine. Analyze these search results and extract yacht/boat listings.
+        content: `You are a yacht discovery AI. Analyze these search results and extract specific yacht listings.
+Focus on finding INDIVIDUAL, NAMED yachts — not platforms or generic categories.
 
 USER SEARCH: "${parsedQuery.raw}"
-PARSED INTENT: ${parsedQuery.intent}
+INTENT: ${parsedQuery.intent}
 BUDGET: ${parsedQuery.budget_max ? `${parsedQuery.currency} ${parsedQuery.budget_max}` : "not specified"}
 LOCATION: ${parsedQuery.country || parsedQuery.region || "not specified"}
 TYPE: ${parsedQuery.boat_type || "any"}
 GUESTS: ${parsedQuery.guests || "not specified"}
-DATE: ${parsedQuery.date || "flexible"}
 
 SEARCH RESULTS:
 ${resultsText}
 
-Extract up to 8 yacht listings from these results. For each listing, estimate details from the snippet and title.
-Return ONLY a valid JSON array of objects with this structure:
+Extract up to 4 specific yacht listings visible in these snippets.
+Return ONLY a valid JSON array:
 [{
-  "name": "yacht name",
+  "name": "specific yacht name",
   "type": "motor|sailing|catamaran|superyacht|speedboat|gulet",
-  "brand": "builder/brand or null",
+  "brand": "builder or null",
   "model": "model or null",
   "year": 2024,
   "length_ft": 85,
@@ -128,20 +214,18 @@ Return ONLY a valid JSON array of objects with this structure:
   "crew": 3,
   "price_per_week": 50000,
   "currency": "EUR",
-  "region": "Mediterranean",
-  "country": "Croatia",
-  "port": "Split",
-  "features": ["feature1", "feature2"],
-  "description": "Brief description of the yacht and why it matches",
-  "source_url": "the URL from search results",
-  "source_title": "the title from search results",
+  "region": "region",
+  "country": "country",
+  "port": "port",
+  "features": [],
+  "description": "brief description",
+  "source_url": "URL from search results",
+  "source_title": "title",
   "luxury_level": 4,
-  "match_score": 0.85,
-  "match_reasons": ["Reason 1", "Reason 2"],
-  "ai_summary": "2-3 sentence explanation why this yacht matches the user's request"
-}]
-
-Be realistic with estimates. If you can't determine a value, use reasonable defaults for the yacht type and region. Focus on the best matches for the user's query. Set match_score between 0.3-0.95 based on how well each result matches the query.`,
+  "match_score": 0.75,
+  "match_reasons": ["reason"],
+  "ai_summary": "why this matches"
+}]`,
       },
     ],
   });
@@ -150,7 +234,10 @@ Be realistic with estimates. If you can't determine a value, use reasonable defa
     msg.content[0].type === "text" ? msg.content[0].text : "[]";
 
   try {
-    const cleaned = text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+    const cleaned = text
+      .replace(/```json?\n?/g, "")
+      .replace(/```/g, "")
+      .trim();
     return JSON.parse(cleaned);
   } catch {
     return [];
