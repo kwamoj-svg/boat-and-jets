@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { Logo } from "@/components/Logo";
 import { SearchInput } from "@/components/SearchInput";
 import { SuggestionChips } from "@/components/SuggestionChips";
+import { GlobeAnimation } from "@/components/GlobeAnimation";
 import { Waves, Shield, Sparkles, Globe } from "lucide-react";
 
 export default function Home() {
@@ -17,6 +18,10 @@ export default function Home() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--color-navy-light)_0%,_var(--color-navy)_70%)]" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gold/[0.02] rounded-full blur-[120px]" />
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold/10 to-transparent" />
+        {/* Globe background */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-40">
+          <GlobeAnimation />
+        </div>
       </div>
 
       {/* Hero */}
@@ -40,12 +45,14 @@ export default function Home() {
             <SearchInput size="large" autoFocus onDropdownChange={handleDropdown} />
           </div>
 
-          <div
-            className={`animate-fade-in transition-all duration-200 ${dropdownOpen ? "opacity-0 pointer-events-none" : ""}`}
-            style={{ animationDelay: "0.45s", ...(!dropdownOpen ? {} : {}) }}
-          >
-            <SuggestionChips />
-          </div>
+          {!dropdownOpen && (
+            <div
+              className="animate-fade-in"
+              style={{ animationDelay: "0.45s", opacity: 0 }}
+            >
+              <SuggestionChips />
+            </div>
+          )}
         </div>
       </section>
 
