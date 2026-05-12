@@ -7,7 +7,7 @@ import {
 } from "@/lib/claude-ai";
 import type { ExtractedListing } from "@/lib/claude-ai";
 
-export const maxDuration = 60;
+export const maxDuration = 45;
 
 function getDomain(url: string): string {
   try {
@@ -34,25 +34,24 @@ export async function GET(req: NextRequest) {
       }
 
       try {
-        // Stage 1: Parse query with spell correction
+        // Stage 1: Parse query
         send("stage", { stage: "parsing", message: "Understanding your search..." });
         const parsed = await parseUserQuery(q);
         send("parsed", parsed);
 
-        // Stage 2: Blast the internet — 12 parallel search queries + image search
-        send("stage", { stage: "searching", message: "Searching across 50+ platforms worldwide..." });
+        // Stage 2: Search — 8 queries + images in parallel
+        send("stage", { stage: "searching", message: "Searching 50+ platforms worldwide..." });
         const queries = buildSearchQueries(parsed);
 
         const imageQuery = [
           parsed.boat_type || "yacht",
           parsed.country || parsed.region || "",
-          parsed.style || "",
           parsed.intent === "buy" ? "for sale" : "charter",
         ].filter(Boolean).join(" ");
 
         const [allResults, imageResults] = await Promise.all([
           Promise.all(queries.map((query) => searchWeb(query, 10))),
-          searchImages(imageQuery, 30),
+          searchImages(imageQuery, 20),
         ]);
 
         // Dedupe by URL
@@ -63,23 +62,24 @@ export async function GET(req: NextRequest) {
           return true;
         });
 
+        const platformCount = new Set(uniqueResults.map(r => getDomain(r.link))).size;
         send("stage", {
           stage: "fetching",
-          message: `Found ${uniqueResults.length} sources across ${new Set(uniqueResults.map(r => getDomain(r.link))).size} platforms...`,
+          message: `Found ${uniqueResults.length} results from ${platformCount} platforms...`,
         });
 
-        // Diversify by domain (max 3 per domain for fetching — gives more variety)
+        // Diversify pages (max 2 per domain)
         const domainCount = new Map<string, number>();
         const diverseResults = uniqueResults.filter((r) => {
           const domain = getDomain(r.link);
           const count = domainCount.get(domain) || 0;
-          if (count >= 3) return false;
+          if (count >= 2) return false;
           domainCount.set(domain, count + 1);
           return true;
         });
 
-        // Stage 3: Fetch up to 20 pages in parallel
-        const topPages = diverseResults.slice(0, 20);
+        // Stage 3: Fetch 12 pages in parallel (fast, token-efficient)
+        const topPages = diverseResults.slice(0, 12);
         const pageContents = await Promise.all(
           topPages.map(async (r) => {
             const content = await fetchPageContent(r.link);
@@ -91,69 +91,58 @@ export async function GET(req: NextRequest) {
 
         send("stage", {
           stage: "analyzing",
-          message: `AI analyzing ${pagesWithContent.length} pages from ${new Set(pagesWithContent.map(p => getDomain(p.url))).size} different platforms...`,
+          message: `AI analyzing ${pagesWithContent.length} pages...`,
         });
 
-        // Stage 4: Split pages into batches and extract in parallel for speed + diversity
-        const BATCH_SIZE = 6;
-        const pageBatches: typeof pagesWithContent[] = [];
-        for (let i = 0; i < pagesWithContent.length; i += BATCH_SIZE) {
-          pageBatches.push(pagesWithContent.slice(i, i + BATCH_SIZE));
-        }
+        // Stage 4: Extract — pages + snippets in parallel (2 AI calls total)
+        const [pageListings, snippetListings] = await Promise.all([
+          pagesWithContent.length > 0
+            ? extractBoatsFromPages(pagesWithContent, parsed)
+            : Promise.resolve([]),
+          extractListingsFromSearchResults(uniqueResults.slice(0, 25), parsed),
+        ]);
 
-        const extractionPromises = [
-          ...pageBatches.map((batch) => extractBoatsFromPages(batch, parsed)),
-          extractListingsFromSearchResults(uniqueResults.slice(0, 30), parsed),
-        ];
-
-        const extractionResults = await Promise.all(extractionPromises);
-
-        // Stage 5: Merge all results, dedupe by name
+        // Stage 5: Merge + dedupe
         const allListings: ExtractedListing[] = [];
         const existingNames = new Set<string>();
 
-        for (const batch of extractionResults) {
-          for (const listing of batch) {
-            const key = listing.name.toLowerCase().trim();
-            if (!existingNames.has(key)) {
-              allListings.push(listing);
-              existingNames.add(key);
-            }
+        for (const listing of [...pageListings, ...snippetListings]) {
+          const key = listing.name?.toLowerCase().trim();
+          if (key && !existingNames.has(key)) {
+            allListings.push(listing);
+            existingNames.add(key);
           }
         }
 
-        // Attach images — multi-strategy matching
+        // Attach images
         for (const listing of allListings) {
           if (listing.image_url) continue;
 
-          const nameLower = listing.name.toLowerCase();
-          const nameParts = nameLower.split(/[\s/]+/).filter(w => w.length > 2);
+          const nameLower = (listing.name || "").toLowerCase();
+          const parts = nameLower.split(/[\s/]+/).filter(w => w.length > 2);
 
-          // Strategy 1: Direct name match in image titles
           for (const img of imageResults) {
-            const titleLower = img.title.toLowerCase();
-            if (nameParts.some(part => titleLower.includes(part))) {
+            const t = img.title.toLowerCase();
+            if (parts.some(p => t.includes(p))) {
               listing.image_url = img.imageUrl;
               break;
             }
           }
 
-          // Strategy 2: Brand/model match
           if (!listing.image_url && (listing.brand || listing.model)) {
-            const brandModel = `${listing.brand || ""} ${listing.model || ""}`.toLowerCase().trim();
+            const bm = `${listing.brand || ""} ${listing.model || ""}`.toLowerCase().trim();
             for (const img of imageResults) {
-              if (img.title.toLowerCase().includes(brandModel)) {
+              if (img.title.toLowerCase().includes(bm)) {
                 listing.image_url = img.imageUrl;
                 break;
               }
             }
           }
 
-          // Strategy 3: Domain match
           if (!listing.image_url) {
-            const domain = getDomain(listing.source_url).split(".")[0];
+            const d = getDomain(listing.source_url).split(".")[0];
             for (const img of imageResults) {
-              if (getDomain(img.link).includes(domain)) {
+              if (getDomain(img.link).includes(d)) {
                 listing.image_url = img.imageUrl;
                 break;
               }
@@ -168,35 +157,30 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // Sort by match score
+        // Sort + diversify (max 3 per domain)
         allListings.sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0));
 
-        // Diversify final results (max 3 per domain)
         const sourceCounts = new Map<string, number>();
-        const diverseListings = allListings.filter((l) => {
+        const finalListings = allListings.filter((l) => {
           const domain = getDomain(l.source_url);
           const count = sourceCounts.get(domain) || 0;
           if (count >= 3) return false;
           sourceCounts.set(domain, count + 1);
           return true;
-        });
+        }).slice(0, 15);
 
         // Stream results
-        const final = diverseListings.slice(0, 20);
-        const platformCount = new Set(final.map(l => getDomain(l.source_url))).size;
-        send("stage", {
-          stage: "results",
-          message: `Found ${final.length} boats from ${platformCount} platforms`,
-        });
+        const finalPlatforms = new Set(finalListings.map(l => getDomain(l.source_url))).size;
+        send("stage", { stage: "results", message: `${finalListings.length} boats from ${finalPlatforms} platforms` });
 
-        for (const listing of final) {
+        for (const listing of finalListings) {
           send("listing", listing);
         }
 
         send("done", {
           total_found: allListings.length,
-          displayed: final.length,
-          platforms_searched: new Set(uniqueResults.map(r => getDomain(r.link))).size,
+          displayed: finalListings.length,
+          platforms_searched: platformCount,
           pages_analyzed: pagesWithContent.length,
           search_id: crypto.randomUUID(),
         });

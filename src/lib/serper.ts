@@ -15,12 +15,10 @@ export async function searchWeb(query: string, num = 10): Promise<SerperResult[]
     body: JSON.stringify({ q: query, num }),
   });
 
-  if (!res.ok) {
-    throw new Error(`Serper API error: ${res.status}`);
-  }
+  if (!res.ok) return [];
 
   const data = await res.json();
-  const organic: SerperResult[] = (data.organic ?? []).map(
+  return (data.organic ?? []).map(
     (r: { title: string; link: string; snippet: string }, i: number) => ({
       title: r.title,
       link: r.link,
@@ -28,94 +26,29 @@ export async function searchWeb(query: string, num = 10): Promise<SerperResult[]
       position: i + 1,
     })
   );
-
-  return organic;
 }
 
-// World's most comprehensive yacht/boat platform list
 const PLATFORMS = [
-  // Major international charter platforms
-  "yachtcharterfleet.com",
-  "getmyboat.com",
-  "click-boat.com",
-  "samboat.com",
-  "boatbookings.com",
-  "charterworld.com",
-  "boatsetter.com",
-  "nautal.com",
-  "zizoo.com",
-  "sailo.com",
-  "moorings.com",
-  "dreamyachtcharter.com",
-  "charterindex.com",
-  "12knots.com",
-  "happycharter.com",
-  "boatburner.com",
-  // Luxury / superyacht
-  "burgessyachts.com",
-  "fraseryachts.com",
-  "edmistoncompany.com",
-  "oceanindependence.com",
-  "worthavenueyachts.com",
-  "denisonyachtsales.com",
-  "northropandjohnson.com",
-  "iyc.com",
-  "superyachttimes.com",
-  "bfraser.com",
-  "yachtworld.com",
-  "boat-hq.com",
-  // Mediterranean specialists
-  "yacht-charter-croatia.com",
-  "mycroatiancharter.com",
-  "croatialuxurygulet.com",
-  "grecharter.com",
-  "greekcharteryachts.com",
-  "turkishgulet.com",
-  "bodrum-yachtcharter.com",
-  "sardiniayachtcharter.com",
-  "amalfi-charter.com",
-  "balearic-yacht-charter.com",
-  // Caribbean & Americas
-  "caribbeanyachtcharter.com",
-  "bvicrewedyachts.com",
-  "nicholsonyachts.com",
-  "catamaran-charter.com",
-  // German / DACH market
-  "scansail.de",
-  "master-yachting.de",
-  "argos-yachtcharter.de",
-  "yacht.de",
-  "yachtico.com",
-  "sunsail.de",
-  "chartercheck.com",
-  // French market
+  // International charter
+  "yachtcharterfleet.com", "getmyboat.com", "click-boat.com", "samboat.com",
+  "boatbookings.com", "charterworld.com", "boatsetter.com", "nautal.com",
+  "zizoo.com", "sailo.com", "moorings.com", "dreamyachtcharter.com",
+  "charterindex.com", "12knots.com", "happycharter.com",
+  // Luxury
+  "burgessyachts.com", "fraseryachts.com", "edmistoncompany.com",
+  "oceanindependence.com", "northropandjohnson.com", "iyc.com",
+  // Mediterranean
+  "yacht-charter-croatia.com", "mycroatiancharter.com", "croatialuxurygulet.com",
+  "grecharter.com", "turkishgulet.com", "sardiniayachtcharter.com",
+  // Caribbean
+  "caribbeanyachtcharter.com", "nicholsonyachts.com",
+  // DACH
+  "scansail.de", "master-yachting.de", "argos-yachtcharter.de", "yachtico.com",
+  // Sale
+  "yachtworld.com", "boats.com", "boattrader.com", "rightboat.com", "theyachtmarket.com",
+  // French
   "filovent.com",
-  "oceans-evasion.com",
-  // Sale platforms
-  "boats.com",
-  "boattrader.com",
-  "yacht.de",
-  "scanboat.com",
-  "rightboat.com",
-  "theyachtmarket.com",
-  "apolloduck.com",
 ];
-
-// Location-specific search terms per region
-const REGION_TERMS: Record<string, string[]> = {
-  croatia: ["Dalmatia", "Split", "Dubrovnik", "Zadar", "Hvar", "Kornati"],
-  greece: ["Cyclades", "Ionian", "Dodecanese", "Saronic", "Sporades", "Athens", "Mykonos", "Santorini"],
-  turkey: ["Bodrum", "Gocek", "Fethiye", "Marmaris", "Antalya"],
-  italy: ["Sardinia", "Sicily", "Amalfi", "Naples", "Portofino", "Cinque Terre"],
-  spain: ["Mallorca", "Ibiza", "Menorca", "Barcelona", "Costa Brava"],
-  france: ["Cote d'Azur", "Corsica", "Nice", "Cannes", "Saint-Tropez"],
-  caribbean: ["BVI", "USVI", "St Martin", "Antigua", "Bahamas", "Grenada"],
-  usa: ["Miami", "Fort Lauderdale", "Key West", "San Diego", "Newport", "Hamptons"],
-  thailand: ["Phuket", "Koh Samui", "Krabi", "Phang Nga"],
-  uae: ["Dubai", "Abu Dhabi"],
-  montenegro: ["Kotor", "Tivat", "Budva"],
-  monaco: ["Monaco", "Monte Carlo"],
-};
 
 export function buildSearchQueries(parsed: {
   intent: string;
@@ -131,92 +64,48 @@ export function buildSearchQueries(parsed: {
   raw: string;
 }): string[] {
   const queries: string[] = [];
-  const location = parsed.country || parsed.region || "";
+  const loc = parsed.country || parsed.region || "";
   const type = parsed.boat_type || "yacht";
-  const budget = parsed.budget_max
-    ? `under ${parsed.currency || "€"}${parsed.budget_max.toLocaleString("en-US")}`
-    : "";
+  const budget = parsed.budget_max ? `under ${parsed.currency || "€"}${parsed.budget_max}` : "";
   const guests = parsed.guests ? `${parsed.guests} guests` : "";
-  const intentEN = parsed.intent === "buy" ? "for sale" : "charter";
-  const intentDE = parsed.intent === "buy" ? "kaufen" : "mieten chartern";
-  const intentFR = parsed.intent === "buy" ? "à vendre" : "location";
-  const year = "2025 2026";
+  const intent = parsed.intent === "buy" ? "for sale" : "charter";
 
-  // 1: Raw query — best intent signal
+  // 1: Raw query
   queries.push(parsed.raw);
 
-  // 2: English structured (most important)
-  queries.push(
-    `${type} ${intentEN} ${location} ${budget} ${guests} price per week ${year}`.trim()
-  );
+  // 2: Structured EN
+  queries.push(`${type} ${intent} ${loc} ${budget} ${guests} 2025 2026`.trim());
 
-  // 3: Specific boat listing query
-  queries.push(
-    `"${type}" "${location}" ${intentEN} ${guests} cabins price -blog -news -article -magazine`.trim()
-  );
+  // 3: Listing-focused (excludes blogs/articles)
+  queries.push(`"${type}" "${loc}" ${intent} ${guests} price cabins -blog -news -article`.trim());
 
-  // 4: German structured
-  queries.push(
-    `${type} ${intentDE} ${location} ${budget} ${guests} Preis pro Woche ${year}`.trim()
-  );
+  // 4: German
+  const intentDE = parsed.intent === "buy" ? "kaufen" : "chartern mieten";
+  queries.push(`${type} ${intentDE} ${loc} ${budget} ${guests} Preis`.trim());
 
-  // 5: French structured (for Med destinations)
-  if (["france", "corsica", "monaco"].some(k => location.toLowerCase().includes(k))) {
-    queries.push(
-      `${type} ${intentFR} ${location} ${budget} ${guests} prix par semaine`.trim()
-    );
-  }
-
-  // 6-8: Platform groups (3 groups of ~20 each for max coverage)
-  const chunkSize = Math.ceil(PLATFORMS.length / 3);
+  // 5-7: Platform groups (3 groups, 8 per group)
   for (let i = 0; i < 3; i++) {
-    const group = PLATFORMS.slice(i * chunkSize, (i + 1) * chunkSize)
-      .slice(0, 8) // max 8 per OR group for Google
-      .map((p) => `site:${p}`)
+    const group = PLATFORMS.slice(i * 12, (i + 1) * 12)
+      .slice(0, 8)
+      .map(p => `site:${p}`)
       .join(" OR ");
-    queries.push(`(${group}) ${type} ${location} ${guests} ${intentEN}`.trim());
+    queries.push(`(${group}) ${type} ${loc} ${intent}`.trim());
   }
 
-  // 9: Region-specific sub-locations
-  const countryKey = location.toLowerCase().replace(/\s+/g, "");
-  const regionTerms = REGION_TERMS[countryKey];
-  if (regionTerms) {
-    const subLocations = regionTerms.slice(0, 4).join(" OR ");
-    queries.push(
-      `${type} ${intentEN} (${subLocations}) ${budget} ${guests}`.trim()
-    );
-  }
+  // 8: Best/comparison query
+  queries.push(`best ${type} ${intent} ${loc} ${guests} ${budget} top`.trim());
 
-  // 10: Comparison / review query (finds aggregator pages with multiple boats)
-  queries.push(
-    `best ${type} ${intentEN} ${location} ${year} comparison review top 10`.trim()
-  );
-
-  // 11: Style-specific
+  // 9: Style if given
   if (parsed.style) {
-    queries.push(`${parsed.style} ${type} ${intentEN} ${location} ${guests} ${budget}`.trim());
+    queries.push(`${parsed.style} ${type} ${intent} ${loc} ${guests}`.trim());
   }
 
-  // 12: Budget-focused
+  // 10: Budget focused
   if (parsed.budget_max) {
-    queries.push(
-      `affordable ${type} ${intentEN} ${location} ${budget} ${guests} best value`.trim()
-    );
+    queries.push(`affordable ${type} ${intent} ${loc} ${budget} ${guests}`.trim());
   }
 
-  // 13: Direct booking query
-  queries.push(
-    `${type} ${location} ${intentEN} direct booking availability ${guests} ${year}`.trim()
-  );
-
-  // 14: Catamaran/specific type if mentioned
-  if (parsed.boat_type && parsed.boat_type !== "yacht") {
-    queries.push(
-      `${parsed.boat_type} ${intentEN} ${location} ${guests} ${budget} available ${year}`.trim()
-    );
-  }
-
-  return queries.filter((q) => q.length > 10).slice(0, 12);
+  return queries.filter(q => q.length > 10).slice(0, 10);
 }
 
 export interface SerperImageResult {
@@ -235,15 +124,11 @@ export async function searchImages(query: string, num = 10): Promise<SerperImage
       },
       body: JSON.stringify({ q: query, num }),
     });
-
     if (!res.ok) return [];
-
     const data = await res.json();
     return (data.images ?? []).map(
       (r: { title: string; imageUrl: string; link: string }) => ({
-        title: r.title,
-        imageUrl: r.imageUrl,
-        link: r.link,
+        title: r.title, imageUrl: r.imageUrl, link: r.link,
       })
     );
   } catch {
@@ -251,42 +136,31 @@ export async function searchImages(query: string, num = 10): Promise<SerperImage
   }
 }
 
-export interface PageData {
-  url: string;
-  title: string;
-  content: string;
-  images: string[];
-}
-
 export async function fetchPageContent(url: string): Promise<string> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 6000);
 
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9,de;q=0.8,fr;q=0.7",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+        Accept: "text/html",
+        "Accept-Language": "en-US,en;q=0.9,de;q=0.8",
       },
     });
-
     clearTimeout(timeout);
-
     if (!res.ok) return "";
 
     const html = await res.text();
 
-    // Extract image URLs before stripping HTML
-    const imgUrls: string[] = [];
-    const imgRegex = /<img[^>]+src=["']([^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)['"]/gi;
-    let match;
-    while ((match = imgRegex.exec(html)) !== null && imgUrls.length < 10) {
-      const src = match[1];
-      if (src.startsWith("http") && !src.includes("icon") && !src.includes("logo") && !src.includes("sprite")) {
-        imgUrls.push(src);
+    // Extract images
+    const imgs: string[] = [];
+    const imgRe = /<img[^>]+src=["']([^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)['"]/gi;
+    let m;
+    while ((m = imgRe.exec(html)) !== null && imgs.length < 5) {
+      if (m[1].startsWith("http") && !m[1].includes("icon") && !m[1].includes("logo")) {
+        imgs.push(m[1]);
       }
     }
 
@@ -297,21 +171,11 @@ export async function fetchPageContent(url: string): Promise<string> {
       .replace(/<footer[\s\S]*?<\/footer>/gi, "")
       .replace(/<header[\s\S]*?<\/header>/gi, "")
       .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&euro;/g, "€")
-      .replace(/&pound;/g, "£")
-      .replace(/&dollar;/g, "$")
-      .replace(/&#\d+;/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
+      .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&euro;/g, "€")
+      .replace(/&#\d+;/g, "").replace(/\s+/g, " ").trim();
 
-    // Append image URLs at the end so AI can find them
-    const imageSection = imgUrls.length > 0
-      ? `\n[IMAGES FOUND ON PAGE: ${imgUrls.join(" | ")}]`
-      : "";
-
-    return text.slice(0, 12000) + imageSection;
+    const imgSection = imgs.length > 0 ? `\n[IMAGES: ${imgs.join(" | ")}]` : "";
+    return text.slice(0, 6000) + imgSection;
   } catch {
     return "";
   }
