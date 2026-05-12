@@ -94,11 +94,25 @@ export default function DatenschutzPage() {
           </section>
 
           <section>
-            <h2 className="text-xl text-white font-medium mt-8 mb-3">6. Hosting</h2>
+            <h2 className="text-xl text-white font-medium mt-8 mb-3">6. Hosting &amp; Daten&uuml;bermittlung</h2>
             <p>
-              Diese Website wird bei Render (Render Services, Inc.) gehostet. Die Datenbank wird bei
-              Supabase (Supabase, Inc.) betrieben. Beide Anbieter k&ouml;nnen technische Zugriffsdaten
-              verarbeiten. Weitere Informationen finden Sie in deren Datenschutzerkl&auml;rungen.
+              Diese Website wird bei Render (Render Services, Inc., San Francisco, USA) gehostet,
+              Serverstandort: <strong>Frankfurt am Main, Deutschland (EU)</strong>.
+              Die Datenbank wird bei Supabase (Supabase, Inc.) betrieben.
+            </p>
+            <p className="mt-2">
+              Beide Anbieter k&ouml;nnen technische Zugriffsdaten verarbeiten. Soweit eine
+              Daten&uuml;bermittlung in die USA stattfindet, erfolgt diese auf Grundlage des
+              EU-US Data Privacy Framework (DPF) gem. Art. 45 DSGVO bzw. unter Verwendung
+              von EU-Standardvertragsklauseln (SCCs) gem. Art. 46 Abs. 2 lit. c DSGVO.
+            </p>
+            <p className="mt-2">
+              Zur KI-Verarbeitung von Suchanfragen nutzen wir die API von Anthropic (Anthropic, PBC, USA).
+              Anfragen werden nicht persistent gespeichert und enthalten keine personenbezogenen Daten
+              (nur den anonymen Suchbegriff). Die &Uuml;bermittlung erfolgt auf Basis von SCCs.
+            </p>
+            <p className="mt-2">
+              Weitere Informationen finden Sie in den Datenschutzerkl&auml;rungen der jeweiligen Anbieter.
             </p>
           </section>
 
@@ -130,7 +144,7 @@ export default function DatenschutzPage() {
             </p>
           </section>
 
-          <p className="text-gray-500 text-xs mt-10">Stand: Mai 2025</p>
+          <p className="text-gray-500 text-xs mt-10">Stand: Mai 2026</p>
         </div>
       </div>
     </main>
