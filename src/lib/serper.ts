@@ -42,32 +42,49 @@ export function buildSearchQueries(parsed: {
   guests?: number;
   date?: string;
   style?: string;
+  keywords?: string[];
+  raw: string;
 }): string[] {
   const queries: string[] = [];
-  const base = parsed.intent === "buy" ? "for sale" : "charter";
   const location = parsed.country || parsed.region || "";
-  const type = parsed.boat_type || "yacht";
+  const type = parsed.boat_type || "";
   const budget = parsed.budget_max
     ? `under ${parsed.currency || "€"}${parsed.budget_max.toLocaleString("en-US")}`
     : "";
   const guests = parsed.guests ? `${parsed.guests} guests` : "";
+  const intentWord = parsed.intent === "buy" ? "for sale" : "charter";
 
-  // Query 1: Specific boat listings on major platforms
+  // Q1: Direct specific listing search on major platforms
   queries.push(
-    `site:yachtcharterfleet.com OR site:charterworld.com OR site:boatbookings.com ${type} ${base} ${location} ${budget}`.trim()
+    `${type} ${intentWord} ${location} ${budget} ${guests} price per week 2026`.trim()
   );
 
-  // Query 2: Individual yacht detail pages
+  // Q2: Platform-specific search
   queries.push(
-    `"${type}" "${base}" "${location}" "per week" ${budget} ${guests} -blog -guide -article`.trim()
+    `site:yachtcharterfleet.com OR site:getmyboat.com OR site:boatbookings.com OR site:click-boat.com ${type} ${intentWord} ${location} ${guests}`.trim()
   );
 
-  // Query 3: Direct listing search
+  // Q3: Broader search with boat rental terms
   queries.push(
-    `${type} ${base} ${location} ${budget} cabins guests crew price week 2026`.trim()
+    `boat rental ${location} ${type} ${guests} ${budget} weekly`.trim()
   );
 
-  return queries;
+  // Q4: Local language / natural phrasing (pass through user's raw query)
+  queries.push(`${parsed.raw} Preis pro Woche Mieten`);
+
+  // Q5: Alternative platforms and smaller charters
+  queries.push(
+    `${location} ${type || "boat"} hire ${intentWord} ${guests} cabins crew price`.trim()
+  );
+
+  // Q6: Specific yacht names / models search
+  if (type) {
+    queries.push(
+      `"${type}" ${intentWord} ${location} ${budget} specifications cabins`.trim()
+    );
+  }
+
+  return queries.filter((q) => q.length > 10);
 }
 
 export async function fetchPageContent(url: string): Promise<string> {
@@ -79,7 +96,7 @@ export async function fetchPageContent(url: string): Promise<string> {
       signal: controller.signal,
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (compatible; BoatAndJets/1.0; +https://boat-and-jets.onrender.com)",
+          "Mozilla/5.0 (compatible; Boat/1.0; +https://boat-and-jets.onrender.com)",
         Accept: "text/html",
       },
     });
@@ -90,7 +107,6 @@ export async function fetchPageContent(url: string): Promise<string> {
 
     const html = await res.text();
 
-    // Strip HTML tags, keep text content — lightweight extraction
     const text = html
       .replace(/<script[\s\S]*?<\/script>/gi, "")
       .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -104,8 +120,7 @@ export async function fetchPageContent(url: string): Promise<string> {
       .replace(/\s+/g, " ")
       .trim();
 
-    // Return first 6000 chars to stay within token limits
-    return text.slice(0, 6000);
+    return text.slice(0, 8000);
   } catch {
     return "";
   }

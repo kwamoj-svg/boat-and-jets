@@ -21,10 +21,10 @@ export async function GET(req: NextRequest) {
     // Stage 1: Parse user query with AI
     const parsed = await parseUserQuery(q);
 
-    // Stage 2: Search the web
+    // Stage 2: Search the web with multiple queries
     const queries = buildSearchQueries(parsed);
     const allResults = await Promise.all(
-      queries.map((query) => searchWeb(query, 8))
+      queries.map((query) => searchWeb(query, 10))
     );
 
     const seen = new Set<string>();
@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
       return true;
     });
 
-    // Stage 3: Fetch top pages and extract real boat data
-    const topPages = uniqueResults.slice(0, 5);
+    // Stage 3: Fetch top 8 pages in parallel and extract real boat data
+    const topPages = uniqueResults.slice(0, 8);
     const pageContents = await Promise.all(
       topPages.map(async (r) => {
         const content = await fetchPageContent(r.link);
@@ -46,21 +46,22 @@ export async function GET(req: NextRequest) {
     const pagesWithContent = pageContents.filter((p) => p.content.length > 200);
 
     // Stage 4: Extract specific boats from fetched pages
-    let listings = await extractBoatsFromPages(pagesWithContent, parsed);
+    let listings = pagesWithContent.length > 0
+      ? await extractBoatsFromPages(pagesWithContent, parsed)
+      : [];
 
-    // Stage 5: Fallback — also extract from search snippets for more results
-    if (listings.length < 4) {
-      const snippetListings = await extractListingsFromSearchResults(
-        uniqueResults.slice(0, 10),
-        parsed
-      );
-      // Merge, avoiding duplicates by name
-      const existingNames = new Set(listings.map((l) => l.name.toLowerCase()));
-      for (const sl of snippetListings) {
-        if (!existingNames.has(sl.name.toLowerCase())) {
-          listings.push(sl);
-          existingNames.add(sl.name.toLowerCase());
-        }
+    // Stage 5: Also extract from search snippets
+    const snippetListings = await extractListingsFromSearchResults(
+      uniqueResults.slice(0, 15),
+      parsed
+    );
+
+    // Merge, avoiding duplicates by name
+    const existingNames = new Set(listings.map((l) => l.name.toLowerCase()));
+    for (const sl of snippetListings) {
+      if (!existingNames.has(sl.name.toLowerCase())) {
+        listings.push(sl);
+        existingNames.add(sl.name.toLowerCase());
       }
     }
 
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       query: { raw_query: q, parsed },
-      recommendations: listings.slice(0, 8),
+      recommendations: listings.slice(0, 10),
       total_found: listings.length,
       search_id: crypto.randomUUID(),
     });

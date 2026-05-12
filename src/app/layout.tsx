@@ -15,7 +15,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "BOAT & JETS — AI-Powered Yacht Discovery",
+  title: "BOAT — AI-Powered Yacht Discovery",
   description:
     "The future of yacht and boat search. Describe your perfect boat experience and let AI find your match.",
   keywords: [

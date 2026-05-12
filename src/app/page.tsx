@@ -65,7 +65,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-white/[0.04] py-6 px-4 text-center">
         <p className="text-xs text-gray-500 tracking-wider">
-          BOAT & JETS — THE FUTURE OF YACHT DISCOVERY
+          BOAT — THE FUTURE OF YACHT DISCOVERY
         </p>
       </footer>
     </main>

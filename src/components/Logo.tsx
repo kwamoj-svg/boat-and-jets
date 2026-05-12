@@ -35,8 +35,6 @@ export function Logo({ size = "default" }: { size?: "small" | "default" | "large
       </div>
       <div className={`${textSizes[size]} tracking-[0.25em] font-light`}>
         <span className="text-white">BOAT</span>
-        <span className="text-gold mx-1">&</span>
-        <span className="text-white">JETS</span>
       </div>
     </Link>
   );
