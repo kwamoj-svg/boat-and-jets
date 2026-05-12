@@ -4,20 +4,41 @@ import React, { useRef, useEffect, useCallback, useState } from "react";
 
 /* ── Destination coordinates (lon, lat) ── */
 const DESTINATIONS: { name: string; lon: number; lat: number }[] = [
+  // Mittelmeer
   { name: "Monaco", lon: 7.42, lat: 43.73 },
   { name: "Sardinia", lon: 9.12, lat: 40.12 },
   { name: "Ibiza", lon: 1.43, lat: 38.91 },
+  { name: "Mallorca", lon: 2.65, lat: 39.57 },
   { name: "Greek Islands", lon: 25.46, lat: 37.45 },
   { name: "Croatia", lon: 15.98, lat: 43.51 },
   { name: "Amalfi", lon: 14.60, lat: 40.63 },
+  { name: "Côte d'Azur", lon: 6.85, lat: 43.58 },
+  { name: "Sicily", lon: 14.27, lat: 37.6 },
+  { name: "Corsica", lon: 9.1, lat: 42.15 },
+  { name: "Montenegro", lon: 18.8, lat: 42.29 },
+  { name: "Turkey", lon: 28.98, lat: 36.85 },
+  // Karibik & Amerika
   { name: "Caribbean", lon: -61.5, lat: 15.4 },
   { name: "Miami", lon: -80.19, lat: 25.76 },
   { name: "Bahamas", lon: -77.35, lat: 25.03 },
+  { name: "BVI", lon: -64.62, lat: 18.43 },
+  { name: "St. Barths", lon: -62.83, lat: 17.9 },
+  { name: "Antigua", lon: -61.8, lat: 17.09 },
+  { name: "Cancún", lon: -86.85, lat: 21.16 },
+  // Naher Osten & Indischer Ozean
   { name: "Dubai", lon: 55.27, lat: 25.2 },
+  { name: "Oman", lon: 57.0, lat: 23.6 },
   { name: "Maldives", lon: 73.22, lat: 3.2 },
   { name: "Seychelles", lon: 55.49, lat: -4.68 },
+  // Asien & Ozeanien
   { name: "Thailand", lon: 100.99, lat: 12.57 },
+  { name: "Bali", lon: 115.19, lat: -8.41 },
   { name: "Sydney", lon: 151.21, lat: -33.87 },
+  { name: "Whitsundays", lon: 148.95, lat: -20.26 },
+  // Nordeuropa
+  { name: "Skandinavien", lon: 11.97, lat: 57.71 },
+  { name: "Ostsee", lon: 13.4, lat: 54.35 },
+  { name: "Hamburg", lon: 9.99, lat: 53.55 },
 ];
 
 /* ── Minimal TopoJSON decoder ── */
