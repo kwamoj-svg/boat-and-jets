@@ -9,6 +9,13 @@ import type { ExtractedListing } from "@/lib/claude-ai";
 import { resolveLocation, marinasToSearchContext } from "@/lib/google-places";
 import { semanticRank } from "@/lib/embeddings";
 import { scrapeAllPlatforms } from "@/lib/platform-scrapers";
+import {
+  getCachedSearch,
+  cacheSearchResults,
+  saveBoats,
+  findCachedBoats,
+  bulkFindDetailUrls,
+} from "@/lib/database";
 
 export const maxDuration = 45;
 
@@ -37,6 +44,28 @@ export async function GET(req: NextRequest) {
       }
 
       try {
+        // Stage 0: Check search cache (instant results!)
+        const cached = await getCachedSearch(q);
+        if (cached && cached.length > 0) {
+          send("stage", { stage: "cached", message: "Ergebnisse aus Cache geladen" });
+          send("parsed", {}); // placeholder
+          const platforms = new Set(cached.map(l => getDomain(l.source_url))).size;
+          send("stage", { stage: "results", message: `${cached.length} boats from ${platforms} platforms (cached)` });
+          for (const listing of cached) {
+            send("listing", listing);
+          }
+          send("done", {
+            total_found: cached.length,
+            displayed: cached.length,
+            platforms_searched: platforms,
+            pages_analyzed: 0,
+            search_id: crypto.randomUUID(),
+            from_cache: true,
+          });
+          controller.close();
+          return;
+        }
+
         // Stage 1: Parse query
         send("stage", { stage: "parsing", message: "Understanding your search..." });
         const parsed = await parseUserQuery(q);
@@ -53,12 +82,21 @@ export async function GET(req: NextRequest) {
           parsed.intent === "buy" ? "for sale" : "charter",
         ].filter(Boolean).join(" ");
 
-        // Run EVERYTHING in parallel: location, search, images, direct platform scrapers
-        const [locationInfo, allResults, imageResults, platformListings] = await Promise.all([
+        // Run EVERYTHING in parallel: location, search, images, scrapers, DB lookup
+        const [locationInfo, allResults, imageResults, platformListings, dbBoats] = await Promise.all([
           locationQuery ? resolveLocation(locationQuery) : Promise.resolve(null),
           Promise.all(queries.map((query) => searchWeb(query, 10))),
           searchImages(imageQuery, 20),
           scrapeAllPlatforms(locationQuery, parsed.boat_type),
+          findCachedBoats({
+            country: parsed.country || undefined,
+            region: parsed.region || undefined,
+            city: parsed.city || undefined,
+            boatType: parsed.boat_type || undefined,
+            guests: parsed.guests || undefined,
+            budgetPerDay: parsed.budget_per_day || undefined,
+            currency: parsed.currency,
+          }),
         ]);
 
         if (locationInfo) {
@@ -148,11 +186,20 @@ export async function GET(req: NextRequest) {
           extractListingsFromSearchResults(uniqueResults.slice(0, 40), parsed),
         ]);
 
-        // Stage 5: Merge + dedupe (platform scrapers + AI extractions)
+        // Stage 5: Merge + dedupe (DB boats → platform scrapers → AI extractions)
         const allListings: ExtractedListing[] = [];
         const existingNames = new Set<string>();
 
-        // Platform scrapers first (highest quality — direct data)
+        // DB boats first (have verified detail URLs!)
+        for (const listing of dbBoats) {
+          const key = listing.name?.toLowerCase().trim();
+          if (key && key.length > 2 && !existingNames.has(key)) {
+            allListings.push(listing);
+            existingNames.add(key);
+          }
+        }
+
+        // Platform scrapers second (direct data)
         for (const listing of platformListings) {
           const key = listing.name?.toLowerCase().trim();
           if (key && key.length > 2 && !existingNames.has(key)) {
@@ -295,6 +342,23 @@ export async function GET(req: NextRequest) {
           }
         }
 
+        // Stage 5.4: DB URL upgrade — check if we know better URLs from past searches
+        const dbUrls = await bulkFindDetailUrls(allListings);
+        for (const l of allListings) {
+          const betterUrl = dbUrls.get(l.name);
+          if (betterUrl && betterUrl !== l.source_url) {
+            // Only upgrade if current URL looks like a category page
+            try {
+              const path = new URL(l.source_url).pathname;
+              const segments = path.split("/").filter(Boolean);
+              if (segments.length <= 2 || /\/(search|results|fleet|yacht-charter|boat-rental)/i.test(path)) {
+                l.source_url = betterUrl;
+                l.match_score = Math.max(l.match_score, 0.75);
+              }
+            } catch { /* keep */ }
+          }
+        }
+
         // Stage 5.5: Semantic re-ranking with OpenAI embeddings
         const searchText = parsed.optimized_search_query || parsed.corrected_query || q;
         const ranked = await semanticRank(searchText, allListings);
@@ -326,7 +390,14 @@ export async function GET(req: NextRequest) {
           platforms_searched: platformCount,
           pages_analyzed: pagesWithContent.length,
           search_id: crypto.randomUUID(),
+          db_boats: dbBoats.length,
         });
+
+        // Save to DB in background (fire-and-forget)
+        Promise.all([
+          saveBoats(finalListings),
+          cacheSearchResults(q, finalListings, parsed as unknown as Record<string, unknown>),
+        ]).catch(() => {});
       } catch (error) {
         console.error("Search error:", error);
         send("error", { error: "Search failed. Please try again." });
