@@ -1,8 +1,54 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@supabase/supabase-js";
 
 const key = process.env.ANTHROPIC_API_KEY || process.env.BOAT_ANTHROPIC_KEY;
 const client = new Anthropic({ apiKey: key });
+
+function getDb() {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const k = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !k) return null;
+  return createClient(url, k);
+}
+
+/** Look up relevant network partners based on user's latest message */
+async function lookupNetworkPartners(userMessage: string): Promise<string> {
+  const db = getDb();
+  if (!db) return "";
+
+  // Extract keywords for search
+  const keywords = userMessage.toLowerCase();
+  const regions = [
+    "dubai", "monaco", "greece", "croatia", "turkey", "italy", "spain",
+    "ibiza", "mallorca", "sardinia", "miami", "caribbean", "maldives",
+    "seychelles", "thailand", "france", "french_riviera", "bahamas",
+    "amalfi", "montenegro",
+  ];
+  const matchedRegion = regions.find(r => keywords.includes(r));
+
+  if (!matchedRegion) return "";
+
+  try {
+    const { data } = await db
+      .from("yacht_network")
+      .select("company_name, country, city, marina, website, phone, email, categories, luxury_score, ai_quality_score, price_level, vip_friendly, fleet_size, description, languages")
+      .contains("operating_regions", [matchedRegion])
+      .eq("verified", true)
+      .order("ai_quality_score", { ascending: false })
+      .limit(5);
+
+    if (!data || data.length === 0) return "";
+
+    const partnerInfo = data.map((p: Record<string, unknown>) =>
+      `• ${p.company_name} (${p.city || p.country}) — Luxury: ${p.luxury_score}/10, AI: ${p.ai_quality_score}/10, ${p.price_level} | ${(p.categories as string[])?.slice(0, 3).join(", ")} | ${p.vip_friendly ? "VIP" : ""} | ${p.phone || p.email || p.website}`
+    ).join("\n");
+
+    return `\n\nVELIQA NETWORK — Top verifizierte Partner in ${matchedRegion}:\n${partnerInfo}\n\nNutze diese Daten um dem Nutzer konkrete Empfehlungen zu geben. Verweise auf das VELIQA Network (/network) für mehr Details.`;
+  } catch {
+    return "";
+  }
+}
 
 const SYSTEM_PROMPT = `Du bist der VELIQA KI-Concierge — ein erfahrener Luxus-Yacht-Berater und Mitglied des "Verified Global Yacht Network". Du hilfst Kunden bei der Entdeckung und Buchung von Yachten und Booten. Du sprichst fließend Deutsch und Englisch und antwortest in der Sprache des Nutzers.
 
@@ -70,10 +116,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Look up relevant network partners for the latest user message
+    const lastUserMsg = messages.filter(m => m.role === "user").pop();
+    const networkContext = lastUserMsg
+      ? await lookupNetworkPartners(lastUserMsg.content)
+      : "";
+
     const stream = await client.messages.stream({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+      system: SYSTEM_PROMPT + networkContext,
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content,
