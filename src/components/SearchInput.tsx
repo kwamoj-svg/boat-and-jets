@@ -2,7 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Sparkles, Clock, TrendingUp } from "lucide-react";
+import { ArrowRight, Sparkles, Clock, TrendingUp, MapPin, Ship } from "lucide-react";
+import { getSuggestions, type Suggestion } from "@/lib/search-suggestions";
 
 interface SearchInputProps {
   size?: "default" | "large";
@@ -11,37 +12,16 @@ interface SearchInputProps {
   onDropdownChange?: (open: boolean) => void;
 }
 
-// Multilingual example queries — shown as autocomplete suggestions
+// Multilingual example queries — shown as trending when no query
 const EXAMPLE_QUERIES = [
-  // German
   { text: "Segelboot chartern Kroatien 4 Personen", lang: "de" },
   { text: "Katamaran mieten Mallorca unter 5000€", lang: "de" },
   { text: "Yacht kaufen Mittelmeer", lang: "de" },
   { text: "Motorboot Ibiza Party 20 Gäste", lang: "de" },
   { text: "Gulet mieten Türkei 8 Personen Woche", lang: "de" },
-  { text: "Familienboot Griechenland 6 Kabinen", lang: "de" },
-  { text: "Luxusyacht Dubai 12 Gäste", lang: "de" },
-  // English
-  { text: "Catamaran charter Greece 8 guests under €10,000", lang: "en" },
-  { text: "Luxury yacht Miami weekend", lang: "en" },
-  { text: "Sailing boat Croatia family vacation", lang: "en" },
-  { text: "Superyacht Monaco Grand Prix", lang: "en" },
-  { text: "Houseboat Amsterdam 4 people", lang: "en" },
-  { text: "Boat rental Amalfi Coast Italy", lang: "en" },
-  { text: "Catamaran BVI all inclusive crewed", lang: "en" },
-  // French
-  { text: "Location catamaran Corse 6 personnes", lang: "fr" },
-  { text: "Yacht luxe Saint-Tropez", lang: "fr" },
-  { text: "Voilier location Grèce pas cher", lang: "fr" },
-  // Spanish
-  { text: "Alquiler barco Ibiza 10 personas", lang: "es" },
-  { text: "Catamarán alquiler Mallorca semanal", lang: "es" },
-  // Italian
-  { text: "Noleggio barca Sardegna 8 persone", lang: "it" },
-  { text: "Yacht lusso Costiera Amalfitana", lang: "it" },
 ];
 
-// Rotating placeholder texts in multiple languages
+// Rotating placeholder texts
 const PLACEHOLDERS = [
   "Describe your perfect boat experience...",
   "Beschreibe dein perfektes Boot-Erlebnis...",
@@ -55,12 +35,67 @@ const PLACEHOLDERS = [
   "Gulet mieten Türkei 2 Wochen...",
 ];
 
+function SuggestionIcon({ icon }: { icon: Suggestion["icon"] }) {
+  switch (icon) {
+    case "map":
+      return <MapPin className="w-3.5 h-3.5 text-gold/50 shrink-0" />;
+    case "ship":
+      return <Ship className="w-3.5 h-3.5 text-ocean-light/60 shrink-0" />;
+    case "sparkles":
+      return <Sparkles className="w-3.5 h-3.5 text-gold/40 shrink-0" />;
+  }
+}
+
+function CategoryLabel({ category }: { category: Suggestion["category"] }) {
+  const labels: Record<Suggestion["category"], string> = {
+    destination: "Ziel",
+    type: "Bootstyp",
+    popular: "Beliebt",
+  };
+  return (
+    <span className="ml-auto text-[10px] text-gray-600 uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/[0.03]">
+      {labels[category]}
+    </span>
+  );
+}
+
+/**
+ * Highlight matching portions of the suggestion text.
+ */
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <span>{text}</span>;
+
+  const words = query.toLowerCase().trim().split(/\s+/).filter((w) => w.length >= 2);
+  if (words.length === 0) return <span>{text}</span>;
+
+  // Build a regex matching any query word
+  const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const regex = new RegExp(`(${escaped.join("|")})`, "gi");
+
+  const parts = text.split(regex);
+  return (
+    <span>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <span key={i} className="text-gold font-medium">
+            {part}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </span>
+  );
+}
+
 export function SearchInput({ size = "default", initialValue = "", autoFocus = false, onDropdownChange }: SearchInputProps) {
   const [query, setQuery] = useState(initialValue);
   const [focused, setFocused] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   // Rotate placeholder text
@@ -72,6 +107,17 @@ export function SearchInput({ size = "default", initialValue = "", autoFocus = f
     return () => clearInterval(interval);
   }, [query]);
 
+  // Close on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const handleSubmit = useCallback(() => {
     const trimmed = query.trim();
     if (!trimmed) return;
@@ -82,31 +128,71 @@ export function SearchInput({ size = "default", initialValue = "", autoFocus = f
   const handleSelect = useCallback((text: string) => {
     setQuery(text);
     setShowSuggestions(false);
+    setActiveIndex(-1);
     router.push(`/search?q=${encodeURIComponent(text)}`);
   }, [router]);
 
-  // Filter suggestions based on input
-  const suggestions = query.length >= 2
-    ? EXAMPLE_QUERIES.filter((eq) =>
-        eq.text.toLowerCase().includes(query.toLowerCase()) ||
-        query.toLowerCase().split(" ").some((word) =>
-          word.length >= 2 && eq.text.toLowerCase().includes(word)
-        )
-      ).slice(0, 6)
-    : [];
+  // Get smart suggestions from our module
+  const suggestions: Suggestion[] = query.length >= 1 ? getSuggestions(query) : [];
 
-  // Show trending when focused with empty/short query
+  // Show trending when focused with empty query
   const trendingQueries = EXAMPLE_QUERIES.slice(0, 5);
 
-  const dropdownVisible = showSuggestions && focused && (suggestions.length > 0 || query.length < 2);
+  const dropdownVisible = showSuggestions && focused && (suggestions.length > 0 || query.length < 1);
   useEffect(() => {
     onDropdownChange?.(dropdownVisible);
   }, [dropdownVisible, onDropdownChange]);
+
+  // Items currently shown in dropdown
+  const dropdownItems = suggestions.length > 0 ? suggestions : [];
+  const showTrending = query.length < 1 && focused && showSuggestions;
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowSuggestions(false);
+        setActiveIndex(-1);
+        return;
+      }
+
+      if (!dropdownVisible) {
+        if (e.key === "Enter") handleSubmit();
+        return;
+      }
+
+      const itemCount = showTrending ? trendingQueries.length : dropdownItems.length;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev + 1) % itemCount);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev <= 0 ? itemCount - 1 : prev - 1));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (activeIndex >= 0) {
+          const selected = showTrending
+            ? trendingQueries[activeIndex]?.text
+            : dropdownItems[activeIndex]?.text;
+          if (selected) handleSelect(selected);
+        } else {
+          handleSubmit();
+        }
+      }
+    },
+    [dropdownVisible, activeIndex, dropdownItems, showTrending, trendingQueries, handleSelect, handleSubmit]
+  );
+
+  // Reset active index when suggestions change
+  useEffect(() => {
+    setActiveIndex(-1);
+  }, [query]);
 
   const isLarge = size === "large";
 
   return (
     <div
+      ref={containerRef}
       className={`
         relative w-full group
         ${focused ? "scale-[1.01]" : "scale-100"}
@@ -141,9 +227,8 @@ export function SearchInput({ size = "default", initialValue = "", autoFocus = f
           }}
           onBlur={() => {
             setFocused(false);
-            setTimeout(() => setShowSuggestions(false), 200);
           }}
-          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          onKeyDown={handleKeyDown}
           placeholder={PLACEHOLDERS[placeholderIdx]}
           autoFocus={autoFocus}
           className={`
@@ -171,8 +256,8 @@ export function SearchInput({ size = "default", initialValue = "", autoFocus = f
       </div>
 
       {/* Suggestions dropdown */}
-      {showSuggestions && focused && (
-        <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-2xl bg-[#1a2332] border border-white/[0.08] shadow-2xl overflow-hidden">
+      {dropdownVisible && (
+        <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-2xl bg-[#0f1a2e]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl overflow-hidden animate-fade-in">
           {suggestions.length > 0 ? (
             <>
               <div className="px-4 py-2 text-xs text-gray-500 uppercase tracking-wider border-b border-white/[0.04]">
@@ -180,18 +265,25 @@ export function SearchInput({ size = "default", initialValue = "", autoFocus = f
               </div>
               {suggestions.map((s, i) => (
                 <button
-                  key={i}
+                  key={`${s.text}-${i}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => handleSelect(s.text)}
-                  className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/[0.04] hover:text-white flex items-center gap-3 transition-colors"
+                  onMouseEnter={() => setActiveIndex(i)}
+                  className={`
+                    w-full text-left px-4 py-3 text-sm text-gray-300
+                    flex items-center gap-3 transition-colors
+                    ${activeIndex === i ? "bg-white/[0.06] text-white" : "hover:bg-white/[0.04] hover:text-white"}
+                  `}
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-gold/40 shrink-0" />
-                  <span>{s.text}</span>
-                  <span className="ml-auto text-xs text-gray-600 uppercase">{s.lang}</span>
+                  <SuggestionIcon icon={s.icon} />
+                  <span className="flex-1">
+                    <HighlightedText text={s.text} query={query} />
+                  </span>
+                  <CategoryLabel category={s.category} />
                 </button>
               ))}
             </>
-          ) : query.length < 2 ? (
+          ) : showTrending ? (
             <>
               <div className="px-4 py-2 text-xs text-gray-500 uppercase tracking-wider border-b border-white/[0.04] flex items-center gap-2">
                 <TrendingUp className="w-3 h-3" />
@@ -202,7 +294,12 @@ export function SearchInput({ size = "default", initialValue = "", autoFocus = f
                   key={i}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => handleSelect(s.text)}
-                  className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/[0.04] hover:text-white flex items-center gap-3 transition-colors"
+                  onMouseEnter={() => setActiveIndex(i)}
+                  className={`
+                    w-full text-left px-4 py-3 text-sm text-gray-300
+                    flex items-center gap-3 transition-colors
+                    ${activeIndex === i ? "bg-white/[0.06] text-white" : "hover:bg-white/[0.04] hover:text-white"}
+                  `}
                 >
                   <Clock className="w-3.5 h-3.5 text-gray-600 shrink-0" />
                   <span>{s.text}</span>
