@@ -26,6 +26,12 @@ export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
 
           <div className="flex items-center gap-3">
             <Link
+              href="/charter"
+              className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
+            >
+              Katalog
+            </Link>
+            <Link
               href="/network"
               className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
             >

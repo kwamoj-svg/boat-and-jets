@@ -164,6 +164,45 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results: data ?? [], total: count ?? 0, page, error: error?.message });
   }
 
+  // ─ Charter Companies ─
+  if (entity === "charter_companies") {
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
+    const country = searchParams.get("country") || "";
+    const q = searchParams.get("q") || "";
+    const from = (page - 1) * limit;
+
+    let query = db.from("charter_companies").select("*", { count: "exact" })
+      .order("featured", { ascending: false })
+      .order("rating", { ascending: false, nullsFirst: false })
+      .range(from, from + limit - 1);
+
+    if (country) query = query.ilike("country", `%${country}%`);
+    if (q) query = query.or(`company_name.ilike.%${q}%,country.ilike.%${q}%,city.ilike.%${q}%`);
+
+    const { data, count, error } = await query;
+    return NextResponse.json({ results: data ?? [], total: count ?? 0, page, error: error?.message });
+  }
+
+  // ─ Charter Boats ─
+  if (entity === "charter_boats") {
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
+    const boatType = searchParams.get("boat_type") || "";
+    const q = searchParams.get("q") || "";
+    const from = (page - 1) * limit;
+
+    let query = db.from("charter_boats").select("*, charter_companies(company_name)", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, from + limit - 1);
+
+    if (boatType) query = query.eq("boat_type", boatType);
+    if (q) query = query.or(`name.ilike.%${q}%,brand.ilike.%${q}%,base_port.ilike.%${q}%`);
+
+    const { data, count, error } = await query;
+    return NextResponse.json({ results: data ?? [], total: count ?? 0, page, error: error?.message });
+  }
+
   // ─ Search Cache ─
   if (entity === "searches") {
     const { data } = await db.from("search_cache")
@@ -195,7 +234,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "entity, id, and updates required" }, { status: 400 });
   }
 
-  const allowedEntities = ["profiles", "partners", "partner_boats", "yacht_network"];
+  const allowedEntities = ["profiles", "partners", "partner_boats", "yacht_network", "charter_companies", "charter_boats"];
   if (!allowedEntities.includes(entity)) {
     return NextResponse.json({ error: "Invalid entity" }, { status: 400 });
   }
@@ -228,15 +267,17 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "entity and id required" }, { status: 400 });
   }
 
-  const allowedEntities = ["partners", "partner_boats", "yacht_network", "search_cache"];
+  const allowedEntities = ["partners", "partner_boats", "yacht_network", "search_cache", "charter_companies", "charter_boats"];
   if (!allowedEntities.includes(entity)) {
     return NextResponse.json({ error: "Invalid entity" }, { status: 400 });
   }
 
-  // Soft-delete for partners/boats, hard-delete for network/cache
+  // Soft-delete for partners/boats, hard-delete for network/cache/charter
   if (entity === "partners") {
     await db.from(entity).update({ status: "rejected" }).eq("id", id);
   } else if (entity === "partner_boats") {
+    await db.from(entity).update({ status: "deleted" }).eq("id", id);
+  } else if (entity === "charter_boats") {
     await db.from(entity).update({ status: "deleted" }).eq("id", id);
   } else {
     await db.from(entity).delete().eq("id", id);
