@@ -25,16 +25,34 @@ export default function Home() {
 
   return (
     <main className="relative min-h-screen flex flex-col">
-      {/* Background */}
+      {/* Background gradient */}
       <div className="fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--color-navy-light)_0%,_var(--color-navy)_70%)]" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gold/[0.02] rounded-full blur-[120px]" />
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold/10 to-transparent" />
       </div>
 
-      {/* Hero */}
-      <section className="flex flex-col items-center px-4 sm:px-6 pt-10 pb-6">
-        <div className="w-full max-w-5xl mx-auto text-center">
+      {/* Hero — globe is positioned behind content */}
+      <section className="relative flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pt-10 pb-16 min-h-[85vh]">
+        {/* Globe background — centered behind search area, pointer-events none */}
+        <div
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[42%] pointer-events-none select-none transition-opacity duration-700"
+          style={{ opacity: globeHighlight ? 0.65 : 0.35 }}
+        >
+          <div
+            className="transition-all duration-700"
+            style={{
+              filter: globeHighlight
+                ? "drop-shadow(0 0 60px rgba(200,165,90,0.12))"
+                : "none",
+            }}
+          >
+            <GlobeCanvas highlightDestination={globeHighlight} size={520} />
+          </div>
+        </div>
+
+        {/* Content on top of globe */}
+        <div className="relative z-10 w-full max-w-5xl mx-auto text-center">
           <div className="mb-6 animate-fade-in">
             <Logo size="large" />
           </div>
@@ -48,7 +66,7 @@ export default function Home() {
 
           {/* Search bar */}
           <div
-            className="animate-fade-in max-w-3xl mx-auto"
+            className="animate-fade-in max-w-3xl mx-auto relative z-20"
             style={{ animationDelay: "0.3s", opacity: 0 }}
           >
             <SearchInput size="large" autoFocus onDropdownChange={handleDropdown} />
@@ -57,7 +75,7 @@ export default function Home() {
           {/* Filter system */}
           {!dropdownOpen && (
             <div
-              className="animate-fade-in mt-6"
+              className="animate-fade-in mt-6 relative z-10"
               style={{ animationDelay: "0.45s", opacity: 0 }}
             >
               <FilterBar
@@ -66,28 +84,6 @@ export default function Home() {
               />
             </div>
           )}
-        </div>
-      </section>
-
-      {/* Globe — below the filter, inline in page flow */}
-      <section className="flex justify-center px-4 pb-8">
-        <div
-          className="animate-fade-in transition-opacity duration-500"
-          style={{
-            animationDelay: "0.6s",
-            opacity: 0,
-          }}
-        >
-          <div
-            className="transition-all duration-700"
-            style={{
-              filter: globeHighlight
-                ? "drop-shadow(0 0 40px rgba(200,165,90,0.15))"
-                : "none",
-            }}
-          >
-            <GlobeCanvas highlightDestination={globeHighlight} size={380} />
-          </div>
         </div>
       </section>
 
