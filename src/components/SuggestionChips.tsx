@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Anchor, Gem, Users, Zap, PartyPopper } from "lucide-react";
+import { Anchor, Gem, Users, Zap, PartyPopper, Sun, Sailboat, Ship } from "lucide-react";
 import type { ReactNode } from "react";
 
 interface Suggestion {
@@ -11,11 +11,14 @@ interface Suggestion {
 }
 
 const suggestions: Suggestion[] = [
-  { label: "Charter in Croatia", query: "Luxury yacht charter in Croatia for a week", icon: <Anchor className="w-3.5 h-3.5" /> },
-  { label: "Luxury Yacht Dubai", query: "Luxury superyacht in Dubai", icon: <Gem className="w-3.5 h-3.5" /> },
-  { label: "Family Boat Greece", query: "Family-friendly sailing boat in Greece with 4 cabins", icon: <Users className="w-3.5 h-3.5" /> },
-  { label: "Sport Yacht Monaco", query: "High-performance sport yacht in Monaco", icon: <Zap className="w-3.5 h-3.5" /> },
-  { label: "Ibiza Party Boat", query: "Party catamaran in Ibiza for 20 guests", icon: <PartyPopper className="w-3.5 h-3.5" /> },
+  { label: "Segeln Kroatien", query: "Segelboot chartern Kroatien 6 Personen eine Woche", icon: <Sailboat className="w-3.5 h-3.5" /> },
+  { label: "Luxury Dubai", query: "Luxury superyacht charter Dubai 10 guests", icon: <Gem className="w-3.5 h-3.5" /> },
+  { label: "Katamaran Griechenland", query: "Katamaran mieten Griechenland 8 Personen unter 15000€", icon: <Ship className="w-3.5 h-3.5" /> },
+  { label: "Family Mallorca", query: "Familienboot Mallorca 4 Kabinen Kinder", icon: <Users className="w-3.5 h-3.5" /> },
+  { label: "Party Ibiza", query: "Party catamaran Ibiza 20 guests weekend", icon: <PartyPopper className="w-3.5 h-3.5" /> },
+  { label: "Motor Monaco", query: "High-performance motor yacht Monaco", icon: <Zap className="w-3.5 h-3.5" /> },
+  { label: "Côte d'Azur", query: "Location yacht Côte d'Azur Saint-Tropez luxe", icon: <Sun className="w-3.5 h-3.5" /> },
+  { label: "Karibik Törn", query: "Katamaran chartern Karibik BVI 2 Wochen All Inclusive", icon: <Anchor className="w-3.5 h-3.5" /> },
 ];
 
 export function SuggestionChips() {
