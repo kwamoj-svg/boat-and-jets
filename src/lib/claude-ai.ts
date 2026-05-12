@@ -10,6 +10,8 @@ function getClient(): Anthropic {
   return _client;
 }
 
+const FAST_MODEL = "claude-haiku-4-5-20251001";
+
 export interface ParsedUserQuery {
   intent: "charter" | "buy" | "explore";
   region?: string;
@@ -55,32 +57,35 @@ export interface ExtractedListing {
 
 export async function parseUserQuery(raw: string): Promise<ParsedUserQuery> {
   const msg = await getClient().messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 500,
+    model: FAST_MODEL,
+    max_tokens: 600,
     messages: [
       {
         role: "user",
-        content: `Parse this yacht/boat search query into structured JSON. Extract all information you can find.
+        content: `You are the search query parser for the world's best yacht discovery engine.
+Parse this search query into structured JSON. Be smart about understanding intent.
 
 Query: "${raw}"
 
-IMPORTANT: First, correct any spelling mistakes or typos in the query. Then parse the corrected version.
-If the query has spelling errors, include a "corrected_query" field with the fixed version.
-Examples: "Yacth" → "Yacht", "Crotia" → "Croatia", "chartr" → "charter", "Mimai" → "Miami"
+RULES:
+1. SPELL CHECK: Fix any typos first. "Yacth" → "Yacht", "Crotia" → "Croatia", "chartr" → "charter", "Mimai" → "Miami", "Katamaran" → "catamaran", "segeln" → "sailing"
+2. LANGUAGE: Understand German, English, French, Italian, Spanish queries. "Boot mieten Kroatien" = charter in Croatia.
+3. INTENT: "mieten/chartern/rent/hire/charter" = charter. "kaufen/buy/for sale" = buy. Everything else = explore.
+4. Be generous with extraction — infer what you can from context.
 
-Return ONLY valid JSON with this exact structure:
+Return ONLY valid JSON:
 {
   "intent": "charter" | "buy" | "explore",
-  "region": "string or null",
-  "country": "string or null",
+  "region": "Mediterranean/Caribbean/Southeast Asia/etc or null",
+  "country": "specific country or null",
   "budget_max": number or null,
   "currency": "EUR" | "USD" | "GBP",
-  "boat_type": "motor" | "sailing" | "catamaran" | "superyacht" | "speedboat" | "gulet" or null,
+  "boat_type": "motor" | "sailing" | "catamaran" | "superyacht" | "speedboat" | "gulet" | "houseboat" or null,
   "guests": number or null,
   "date": "YYYY-MM-DD or null",
-  "style": "luxury" | "family" | "party" | "sport" | "adventure" | "romantic" or null,
-  "keywords": ["array", "of", "keywords"],
-  "corrected_query": "corrected version if there were typos, or null if query was fine"
+  "style": "luxury" | "family" | "party" | "sport" | "adventure" | "romantic" | "corporate" or null,
+  "keywords": ["extracted", "keywords"],
+  "corrected_query": "corrected version if there were typos, or null"
 }`,
       },
     ],
@@ -108,46 +113,47 @@ export async function extractBoatsFromPages(
   const pagesText = pages
     .map(
       (p, i) =>
-        `=== PAGE ${i + 1} ===\nURL: ${p.url}\nTitle: ${p.title}\nContent:\n${p.content}\n`
+        `=== PAGE ${i + 1} ===\nURL: ${p.url}\nTitle: ${p.title}\nContent:\n${p.content.slice(0, 8000)}\n`
     )
     .join("\n");
 
   const msg = await getClient().messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 4000,
+    model: FAST_MODEL,
+    max_tokens: 8000,
     messages: [
       {
         role: "user",
-        content: `You are the world's best yacht discovery AI. You are given text content scraped from yacht listing websites.
-Your job: find SPECIFIC, INDIVIDUAL, REAL boats/yachts with their actual names and real data.
+        content: `You are the AI engine behind the world's best yacht comparison portal — like Kayak for boats.
+You must find EVERY specific, real, bookable/buyable boat mentioned across these pages.
 
-USER SEARCH: "${parsedQuery.raw}"
+USER SEARCH: "${parsedQuery.corrected_query || parsedQuery.raw}"
 INTENT: ${parsedQuery.intent}
-BUDGET: ${parsedQuery.budget_max ? `${parsedQuery.currency} ${parsedQuery.budget_max}` : "not specified"}
-LOCATION: ${parsedQuery.country || parsedQuery.region || "not specified"}
+BUDGET: ${parsedQuery.budget_max ? `${parsedQuery.currency} ${parsedQuery.budget_max}` : "flexible"}
+LOCATION: ${parsedQuery.country || parsedQuery.region || "worldwide"}
 TYPE: ${parsedQuery.boat_type || "any"}
-GUESTS: ${parsedQuery.guests || "not specified"}
+GUESTS: ${parsedQuery.guests || "any"}
 DATE: ${parsedQuery.date || "flexible"}
+STYLE: ${parsedQuery.style || "any"}
 
 PAGE CONTENTS:
 ${pagesText}
 
-CRITICAL RULES:
-- Extract ONLY real, named boats (e.g. "M/Y SERENITY", "Lagoon 52 Flybridge", "Azimut Grande 35 METROS")
-- NEVER invent boats or make up names. Only use data you see in the text.
-- Each result MUST be a specific individual yacht — NOT a platform, category, or generic description
-- DIVERSIFY: try to find boats from DIFFERENT pages/sources. Do not return 5 boats from the same page if you have data from multiple pages.
-- source_url: use the page URL. If you see a direct link to the boat's detail page in the text, prefer that.
-- If you find an image URL (https://...jpg/png/webp) associated with a boat, include it as "image_url"
-- Prices: be accurate. If listed per day, set price_per_day. If per week, set price_per_week. If for sale, set sale_price.
-- match_score: 0.0 to 1.0 based on how well it matches the user's criteria (budget, location, type, guests)
+EXTRACTION RULES:
+1. Extract EVERY named, specific boat/yacht you can find (e.g. "M/Y SERENITY", "Lagoon 52 AVENTURA", "Sunseeker 76")
+2. NEVER invent names. ONLY use real names from the text.
+3. MAXIMIZE diversity: extract from ALL different pages/domains, not just one.
+4. For source_url: if you find a specific boat detail URL in the text, use it. Otherwise use the page URL.
+5. If [IMAGES FOUND ON PAGE: ...] appears, try to match images to boats and include as image_url.
+6. Prices: be EXACT. per day → price_per_day. per week → price_per_week. for sale → sale_price. Don't guess.
+7. match_score: 0.0-1.0 based on: location match, budget fit, type match, guest capacity, date availability.
+8. features: extract real amenities (Jacuzzi, flybridge, jet ski, WiFi, A/C, watermaker, etc.)
 
-Return ONLY a valid JSON array (max 10 boats):
+Return ONLY a JSON array (find as many as possible, max 12):
 [{
-  "name": "actual yacht name from page",
+  "name": "EXACT yacht name",
   "type": "motor|sailing|catamaran|superyacht|speedboat|gulet",
-  "brand": "builder/brand if mentioned",
-  "model": "model if mentioned",
+  "brand": "builder or null",
+  "model": "model or null",
   "year": 2024,
   "length_ft": 85,
   "cabins": 4,
@@ -157,22 +163,21 @@ Return ONLY a valid JSON array (max 10 boats):
   "price_per_day": null,
   "sale_price": null,
   "currency": "EUR",
-  "region": "Mediterranean",
+  "region": "Dalmatia",
   "country": "Croatia",
   "port": "Split",
-  "features": ["Jacuzzi", "Jet ski", "Flybridge"],
-  "description": "Brief factual description from the page",
-  "source_url": "URL where found",
+  "features": ["Jacuzzi", "Flybridge"],
+  "description": "Factual 1-sentence description",
+  "source_url": "most specific URL to this boat",
   "source_title": "page title",
-  "image_url": "direct image URL if found, or null",
+  "image_url": "image URL if found, or null",
   "luxury_level": 4,
   "match_score": 0.85,
-  "match_reasons": ["Budget match", "Location match", "Right size"],
-  "ai_summary": "One sentence: why this boat matches this specific search"
+  "match_reasons": ["Budget match", "Location match"],
+  "ai_summary": "Why THIS boat is perfect for THIS search"
 }]
 
-If no specific boats found, return [].
-IMPORTANT: Return boats from AS MANY DIFFERENT sources as possible.`,
+Return [] if nothing found. Extract from EVERY page that has boats.`,
       },
     ],
   });
@@ -203,53 +208,49 @@ export async function extractListingsFromSearchResults(
     .join("\n\n");
 
   const msg = await getClient().messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 4000,
+    model: FAST_MODEL,
+    max_tokens: 6000,
     messages: [
       {
         role: "user",
-        content: `You are a yacht discovery AI. Analyze these Google search result snippets to find specific, real yacht listings.
-Only extract INDIVIDUAL, NAMED yachts — never platforms, categories, or articles.
+        content: `You are the world's best yacht search engine. Analyze these Google search results and extract specific yacht listings.
+This is a comparison portal — find as many real, specific boats as possible from DIFFERENT platforms.
 
-USER SEARCH: "${parsedQuery.raw}"
+USER SEARCH: "${parsedQuery.corrected_query || parsedQuery.raw}"
 INTENT: ${parsedQuery.intent}
-BUDGET: ${parsedQuery.budget_max ? `${parsedQuery.currency} ${parsedQuery.budget_max}` : "not specified"}
-LOCATION: ${parsedQuery.country || parsedQuery.region || "not specified"}
+BUDGET: ${parsedQuery.budget_max ? `${parsedQuery.currency} ${parsedQuery.budget_max}` : "flexible"}
+LOCATION: ${parsedQuery.country || parsedQuery.region || "worldwide"}
 TYPE: ${parsedQuery.boat_type || "any"}
-GUESTS: ${parsedQuery.guests || "not specified"}
+GUESTS: ${parsedQuery.guests || "any"}
 
 SEARCH RESULTS:
 ${resultsText}
 
-Extract up to 6 specific yacht listings from DIFFERENT sources/URLs.
-Only include boats where the snippet clearly mentions a specific vessel name or model.
-Return ONLY a valid JSON array:
+RULES:
+- Only extract NAMED, SPECIFIC boats (not platforms or categories)
+- Maximize diversity across different source URLs
+- If a snippet mentions a specific boat name/model, extract it
+- Be conservative with data you can't see — use null for unknown fields
+- match_score should be lower (0.5-0.75) since snippet data is limited
+
+Return ONLY a JSON array (max 8):
 [{
-  "name": "specific yacht name from snippet",
+  "name": "specific yacht name",
   "type": "motor|sailing|catamaran|superyacht|speedboat|gulet",
-  "brand": "builder or null",
-  "model": "model or null",
-  "year": null,
-  "length_ft": null,
-  "cabins": null,
-  "guests": null,
-  "crew": null,
-  "price_per_week": null,
-  "price_per_day": null,
-  "sale_price": null,
+  "brand": null, "model": null, "year": null,
+  "length_ft": null, "cabins": null, "guests": null, "crew": null,
+  "price_per_week": null, "price_per_day": null, "sale_price": null,
   "currency": "EUR",
-  "region": "region",
-  "country": "country",
-  "port": "port or null",
+  "region": "region", "country": "country", "port": null,
   "features": [],
-  "description": "brief description from snippet",
-  "source_url": "the search result URL",
-  "source_title": "search result title",
+  "description": "from snippet",
+  "source_url": "search result URL",
+  "source_title": "title",
   "image_url": null,
   "luxury_level": 3,
-  "match_score": 0.70,
+  "match_score": 0.65,
   "match_reasons": ["reason"],
-  "ai_summary": "why this matches the search"
+  "ai_summary": "why this matches"
 }]`,
       },
     ],

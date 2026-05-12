@@ -34,18 +34,25 @@ export async function GET(req: NextRequest) {
       }
 
       try {
-        // Stage 1: Parse query
+        // Stage 1: Parse query with spell correction
         send("stage", { stage: "parsing", message: "Understanding your search..." });
         const parsed = await parseUserQuery(q);
         send("parsed", parsed);
 
-        // Stage 2: Search the web
-        send("stage", { stage: "searching", message: "Searching the entire internet..." });
+        // Stage 2: Blast the internet — 12 parallel search queries + image search
+        send("stage", { stage: "searching", message: "Searching across 50+ platforms worldwide..." });
         const queries = buildSearchQueries(parsed);
+
+        const imageQuery = [
+          parsed.boat_type || "yacht",
+          parsed.country || parsed.region || "",
+          parsed.style || "",
+          parsed.intent === "buy" ? "for sale" : "charter",
+        ].filter(Boolean).join(" ");
 
         const [allResults, imageResults] = await Promise.all([
           Promise.all(queries.map((query) => searchWeb(query, 10))),
-          searchImages(`${parsed.boat_type || "yacht"} ${parsed.country || parsed.region || ""} charter`.trim(), 20),
+          searchImages(imageQuery, 30),
         ]);
 
         // Dedupe by URL
@@ -58,21 +65,21 @@ export async function GET(req: NextRequest) {
 
         send("stage", {
           stage: "fetching",
-          message: `Found ${uniqueResults.length} sources, fetching pages...`,
+          message: `Found ${uniqueResults.length} sources across ${new Set(uniqueResults.map(r => getDomain(r.link))).size} platforms...`,
         });
 
-        // Diversify by domain (max 2 per domain for fetching)
+        // Diversify by domain (max 3 per domain for fetching — gives more variety)
         const domainCount = new Map<string, number>();
         const diverseResults = uniqueResults.filter((r) => {
           const domain = getDomain(r.link);
           const count = domainCount.get(domain) || 0;
-          if (count >= 2) return false;
+          if (count >= 3) return false;
           domainCount.set(domain, count + 1);
           return true;
         });
 
-        // Stage 3: Fetch pages in parallel
-        const topPages = diverseResults.slice(0, 15);
+        // Stage 3: Fetch up to 20 pages in parallel
+        const topPages = diverseResults.slice(0, 20);
         const pageContents = await Promise.all(
           topPages.map(async (r) => {
             const content = await fetchPageContent(r.link);
@@ -84,48 +91,69 @@ export async function GET(req: NextRequest) {
 
         send("stage", {
           stage: "analyzing",
-          message: `Analyzing ${pagesWithContent.length} pages with AI...`,
+          message: `AI analyzing ${pagesWithContent.length} pages from ${new Set(pagesWithContent.map(p => getDomain(p.url))).size} different platforms...`,
         });
 
-        // Stage 4: Extract from pages AND snippets in parallel
-        const [pageListings, snippetListings] = await Promise.all([
-          pagesWithContent.length > 0
-            ? extractBoatsFromPages(pagesWithContent, parsed)
-            : Promise.resolve([]),
-          extractListingsFromSearchResults(uniqueResults.slice(0, 25), parsed),
-        ]);
+        // Stage 4: Split pages into batches and extract in parallel for speed + diversity
+        const BATCH_SIZE = 6;
+        const pageBatches: typeof pagesWithContent[] = [];
+        for (let i = 0; i < pagesWithContent.length; i += BATCH_SIZE) {
+          pageBatches.push(pagesWithContent.slice(i, i + BATCH_SIZE));
+        }
 
-        // Stage 5: Merge, dedupe by name, attach images
-        const listings: ExtractedListing[] = [...pageListings];
-        const existingNames = new Set(listings.map((l) => l.name.toLowerCase()));
-        for (const sl of snippetListings) {
-          if (!existingNames.has(sl.name.toLowerCase())) {
-            listings.push(sl);
-            existingNames.add(sl.name.toLowerCase());
+        const extractionPromises = [
+          ...pageBatches.map((batch) => extractBoatsFromPages(batch, parsed)),
+          extractListingsFromSearchResults(uniqueResults.slice(0, 30), parsed),
+        ];
+
+        const extractionResults = await Promise.all(extractionPromises);
+
+        // Stage 5: Merge all results, dedupe by name
+        const allListings: ExtractedListing[] = [];
+        const existingNames = new Set<string>();
+
+        for (const batch of extractionResults) {
+          for (const listing of batch) {
+            const key = listing.name.toLowerCase().trim();
+            if (!existingNames.has(key)) {
+              allListings.push(listing);
+              existingNames.add(key);
+            }
           }
         }
 
-        // Attach images from Serper image search
-        const imageMap = new Map<string, string>();
-        for (const img of imageResults) {
-          const key = img.title.toLowerCase();
-          if (!imageMap.has(key)) imageMap.set(key, img.imageUrl);
-        }
-        for (const listing of listings) {
-          if (!listing.image_url) {
-            for (const [key, url] of imageMap) {
-              const nameLower = listing.name.toLowerCase();
-              if (key.includes(nameLower) || nameLower.includes(key.split(" ")[0])) {
-                listing.image_url = url;
+        // Attach images — multi-strategy matching
+        for (const listing of allListings) {
+          if (listing.image_url) continue;
+
+          const nameLower = listing.name.toLowerCase();
+          const nameParts = nameLower.split(/[\s/]+/).filter(w => w.length > 2);
+
+          // Strategy 1: Direct name match in image titles
+          for (const img of imageResults) {
+            const titleLower = img.title.toLowerCase();
+            if (nameParts.some(part => titleLower.includes(part))) {
+              listing.image_url = img.imageUrl;
+              break;
+            }
+          }
+
+          // Strategy 2: Brand/model match
+          if (!listing.image_url && (listing.brand || listing.model)) {
+            const brandModel = `${listing.brand || ""} ${listing.model || ""}`.toLowerCase().trim();
+            for (const img of imageResults) {
+              if (img.title.toLowerCase().includes(brandModel)) {
+                listing.image_url = img.imageUrl;
                 break;
               }
             }
           }
-          // Fallback: use any image from that domain
+
+          // Strategy 3: Domain match
           if (!listing.image_url) {
-            const domain = getDomain(listing.source_url);
+            const domain = getDomain(listing.source_url).split(".")[0];
             for (const img of imageResults) {
-              if (getDomain(img.link).includes(domain.split(".")[0])) {
+              if (getDomain(img.link).includes(domain)) {
                 listing.image_url = img.imageUrl;
                 break;
               }
@@ -134,18 +162,18 @@ export async function GET(req: NextRequest) {
         }
 
         // Normalize prices
-        for (const l of listings) {
+        for (const l of allListings) {
           if (l.price_per_day && !l.price_per_week) {
             l.price_per_week = l.price_per_day * 7;
           }
         }
 
         // Sort by match score
-        listings.sort((a, b) => b.match_score - a.match_score);
+        allListings.sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0));
 
         // Diversify final results (max 3 per domain)
         const sourceCounts = new Map<string, number>();
-        const diverseListings = listings.filter((l) => {
+        const diverseListings = allListings.filter((l) => {
           const domain = getDomain(l.source_url);
           const count = sourceCounts.get(domain) || 0;
           if (count >= 3) return false;
@@ -153,22 +181,27 @@ export async function GET(req: NextRequest) {
           return true;
         });
 
-        // Stream each listing individually for progressive rendering
-        const final = diverseListings.slice(0, 15);
-        send("stage", { stage: "results", message: `Found ${final.length} matching boats` });
+        // Stream results
+        const final = diverseListings.slice(0, 20);
+        const platformCount = new Set(final.map(l => getDomain(l.source_url))).size;
+        send("stage", {
+          stage: "results",
+          message: `Found ${final.length} boats from ${platformCount} platforms`,
+        });
 
         for (const listing of final) {
           send("listing", listing);
         }
 
         send("done", {
-          total_found: listings.length,
+          total_found: allListings.length,
           displayed: final.length,
+          platforms_searched: new Set(uniqueResults.map(r => getDomain(r.link))).size,
+          pages_analyzed: pagesWithContent.length,
           search_id: crypto.randomUUID(),
         });
       } catch (error) {
         console.error("Search error:", error);
-        console.error("Search detail:", error);
         send("error", { error: "Search failed. Please try again." });
       } finally {
         controller.close();

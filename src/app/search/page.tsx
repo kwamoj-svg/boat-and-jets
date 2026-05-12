@@ -121,6 +121,8 @@ function SearchContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalFound, setTotalFound] = useState(0);
+  const [platformsSearched, setPlatformsSearched] = useState(0);
+  const [pagesAnalyzed, setPagesAnalyzed] = useState(0);
 
   const [activeFilters, setActiveFilters] = useState<Set<FilterKey>>(new Set());
   const [sortBy, setSortBy] = useState<SortKey>("match");
@@ -179,6 +181,8 @@ function SearchContent() {
                   break;
                 case "done":
                   setTotalFound(data.total_found);
+                  setPlatformsSearched(data.platforms_searched || 0);
+                  setPagesAnalyzed(data.pages_analyzed || 0);
                   setLoading(false);
                   break;
                 case "error":
@@ -267,7 +271,15 @@ function SearchContent() {
                 boats discovered
               </h1>
               <p className="text-gray-400 text-sm">
-                Live AI-powered results for &ldquo;{q}&rdquo;
+                {platformsSearched > 0 ? (
+                  <>
+                    Searched <span className="text-gray-300">{platformsSearched} platforms</span>,
+                    analyzed <span className="text-gray-300">{pagesAnalyzed} pages</span> for
+                    &ldquo;{q}&rdquo;
+                  </>
+                ) : (
+                  <>Live AI-powered results for &ldquo;{q}&rdquo;</>
+                )}
                 {loading && (
                   <span className="ml-2 text-gold/60 animate-pulse">
                     — still searching...
