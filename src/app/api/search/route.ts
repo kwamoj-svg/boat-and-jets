@@ -8,6 +8,7 @@ import {
 import type { ExtractedListing } from "@/lib/claude-ai";
 import { resolveLocation, marinasToSearchContext } from "@/lib/google-places";
 import { semanticRank } from "@/lib/embeddings";
+import { scrapeAllPlatforms } from "@/lib/platform-scrapers";
 
 export const maxDuration = 45;
 
@@ -41,37 +42,33 @@ export async function GET(req: NextRequest) {
         const parsed = await parseUserQuery(q);
         send("parsed", parsed);
 
-        // Stage 1.5: Resolve location via Google Places (parallel-safe, non-blocking)
-        const locationQuery = [parsed.city, parsed.country, parsed.region].filter(Boolean).join(" ");
-        const locationInfo = locationQuery ? await resolveLocation(locationQuery) : null;
-
-        if (locationInfo) {
-          const marinaNames = marinasToSearchContext(locationInfo.marinas);
-          send("location", {
-            address: locationInfo.formatted_address,
-            lat: locationInfo.lat,
-            lng: locationInfo.lng,
-            marinas: locationInfo.marinas.slice(0, 5),
-          });
-          if (marinaNames && !parsed.optimized_search_query?.includes("marina")) {
-            parsed.optimized_search_query = (parsed.optimized_search_query || "") + ` ${marinaNames.split(",").slice(0, 3).join(" ")}`;
-          }
-        }
-
-        // Stage 2: Search — 8 queries + images in parallel
+        // Stage 1.5: Location + Search + Platform scrapers ALL IN PARALLEL
         send("stage", { stage: "searching", message: "Searching 50+ platforms worldwide..." });
-        const queries = buildSearchQueries(parsed);
 
+        const locationQuery = [parsed.city, parsed.country, parsed.region].filter(Boolean).join(" ");
+        const queries = buildSearchQueries(parsed);
         const imageQuery = [
           parsed.boat_type || "yacht",
           parsed.country || parsed.region || "",
           parsed.intent === "buy" ? "for sale" : "charter",
         ].filter(Boolean).join(" ");
 
-        const [allResults, imageResults] = await Promise.all([
+        // Run EVERYTHING in parallel: location, search, images, direct platform scrapers
+        const [locationInfo, allResults, imageResults, platformListings] = await Promise.all([
+          locationQuery ? resolveLocation(locationQuery) : Promise.resolve(null),
           Promise.all(queries.map((query) => searchWeb(query, 10))),
           searchImages(imageQuery, 20),
+          scrapeAllPlatforms(locationQuery, parsed.boat_type),
         ]);
+
+        if (locationInfo) {
+          send("location", {
+            address: locationInfo.formatted_address,
+            lat: locationInfo.lat,
+            lng: locationInfo.lng,
+            marinas: locationInfo.marinas.slice(0, 5),
+          });
+        }
 
         // Dedupe by URL
         const seen = new Set<string>();
@@ -81,10 +78,10 @@ export async function GET(req: NextRequest) {
           return true;
         });
 
-        const platformCount = new Set(uniqueResults.map(r => getDomain(r.link))).size;
+        const platformCount = new Set(uniqueResults.map(r => getDomain(r.link))).size + (platformListings.length > 0 ? 4 : 0);
         send("stage", {
           stage: "fetching",
-          message: `Found ${uniqueResults.length} results from ${platformCount} platforms...`,
+          message: `Found ${uniqueResults.length + platformListings.length} results from ${platformCount} platforms...`,
         });
 
         // Diversify pages (max 2 per domain)
@@ -97,8 +94,8 @@ export async function GET(req: NextRequest) {
           return true;
         });
 
-        // Stage 3: Fetch 12 pages in parallel (fast, token-efficient)
-        const topPages = diverseResults.slice(0, 12);
+        // Stage 3: Fetch 15 pages in parallel (faster timeout)
+        const topPages = diverseResults.slice(0, 15);
         const pageContents = await Promise.all(
           topPages.map(async (r) => {
             const content = await fetchPageContent(r.link);
@@ -110,7 +107,7 @@ export async function GET(req: NextRequest) {
 
         send("stage", {
           stage: "analyzing",
-          message: `AI analyzing ${pagesWithContent.length} pages...`,
+          message: `AI analyzing ${pagesWithContent.length} pages + ${platformListings.length} direct listings...`,
         });
 
         // Stage 4: Extract — pages + snippets in parallel (2 AI calls total)
@@ -121,10 +118,20 @@ export async function GET(req: NextRequest) {
           extractListingsFromSearchResults(uniqueResults.slice(0, 25), parsed),
         ]);
 
-        // Stage 5: Merge + dedupe
+        // Stage 5: Merge + dedupe (platform scrapers + AI extractions)
         const allListings: ExtractedListing[] = [];
         const existingNames = new Set<string>();
 
+        // Platform scrapers first (highest quality — direct data)
+        for (const listing of platformListings) {
+          const key = listing.name?.toLowerCase().trim();
+          if (key && key.length > 2 && !existingNames.has(key)) {
+            allListings.push(listing);
+            existingNames.add(key);
+          }
+        }
+
+        // Then AI-extracted listings
         for (const listing of [...pageListings, ...snippetListings]) {
           const key = listing.name?.toLowerCase().trim();
           if (key && !existingNames.has(key)) {

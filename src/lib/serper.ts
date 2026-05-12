@@ -149,7 +149,7 @@ export async function searchImages(query: string, num = 10): Promise<SerperImage
 export async function fetchPageContent(url: string): Promise<string> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
+    const timeout = setTimeout(() => controller.abort(), 4000);
     const baseUrl = new URL(url).origin;
 
     const res = await fetch(url, {
