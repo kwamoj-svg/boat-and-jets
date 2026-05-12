@@ -5,19 +5,60 @@ import { Star, Users, Ruler, MapPin, Sparkles, ExternalLink, Anchor } from "luci
 import { formatPrice } from "@/lib/format";
 import type { ExtractedListing } from "@/lib/claude-ai";
 
-const TYPE_EMOJI: Record<string, string> = {
-  sailing: "⛵",
-  catamaran: "🛥️",
-  gulet: "🚢",
-  superyacht: "🛳️",
-  motor: "🚤",
-  speedboat: "🏎️",
+// Fallback images by boat type — always show a relevant photo
+const FALLBACK_IMAGES: Record<string, string[]> = {
+  sailing: [
+    "https://images.unsplash.com/photo-1540946485063-a40da27545f8?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1569263979104-865ab7cd8d13?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1534854638093-bada1813ca19?w=600&h=400&fit=crop",
+  ],
+  catamaran: [
+    "https://images.unsplash.com/photo-1567899378494-47b22a2ae96a?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1605281317010-fe5ffe798166?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=600&h=400&fit=crop",
+  ],
+  motor: [
+    "https://images.unsplash.com/photo-1569263979104-865ab7cd8d13?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1622397745000-91bc577d69e0?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1588359348347-9bc6cbbb689e?w=600&h=400&fit=crop",
+  ],
+  superyacht: [
+    "https://images.unsplash.com/photo-1567899378494-47b22a2ae96a?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1605281317010-fe5ffe798166?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1622397745000-91bc577d69e0?w=600&h=400&fit=crop",
+  ],
+  gulet: [
+    "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1540946485063-a40da27545f8?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1567899378494-47b22a2ae96a?w=600&h=400&fit=crop",
+  ],
+  speedboat: [
+    "https://images.unsplash.com/photo-1588359348347-9bc6cbbb689e?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1622397745000-91bc577d69e0?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1569263979104-865ab7cd8d13?w=600&h=400&fit=crop",
+  ],
+  default: [
+    "https://images.unsplash.com/photo-1567899378494-47b22a2ae96a?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1540946485063-a40da27545f8?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1605281317010-fe5ffe798166?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1622397745000-91bc577d69e0?w=600&h=400&fit=crop",
+    "https://images.unsplash.com/photo-1588359348347-9bc6cbbb689e?w=600&h=400&fit=crop",
+  ],
 };
+
+function getFallbackImage(type: string, index: number): string {
+  const images = FALLBACK_IMAGES[type?.toLowerCase()] || FALLBACK_IMAGES.default;
+  return images[index % images.length];
+}
 
 export function ListingCard({ listing, index }: { listing: ExtractedListing; index: number }) {
   const matchPercent = Math.round((listing.match_score ?? 0) * 100);
   const [imgError, setImgError] = useState(false);
-  const hasImage = listing.image_url && !imgError;
+
+  const imgSrc = (listing.image_url && !imgError)
+    ? listing.image_url
+    : getFallbackImage(listing.type, index);
 
   const price = listing.price_per_week || listing.sale_price;
   const priceLabel = listing.price_per_week ? "/week" : listing.sale_price ? "" : null;
@@ -59,29 +100,18 @@ export function ListingCard({ listing, index }: { listing: ExtractedListing; ind
           </div>
         </div>
 
-        {/* Image area */}
-        <div className="relative h-48 overflow-hidden bg-gradient-to-br from-navy-light to-navy-lighter">
-          {hasImage ? (
-            <img
-              src={listing.image_url}
-              alt={listing.name}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              onError={() => setImgError(true)}
-              loading="lazy"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <span className="text-5xl">
-                  {TYPE_EMOJI[listing.type] || "🚤"}
-                </span>
-                <p className="text-xs text-gray-500 mt-2 capitalize">{listing.type}</p>
-              </div>
-            </div>
-          )}
+        {/* Image — always visible */}
+        <div className="relative h-48 overflow-hidden">
+          <img
+            src={imgSrc}
+            alt={listing.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={() => setImgError(true)}
+            loading="lazy"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-navy/90 via-navy/20 to-transparent" />
 
-          {/* Source badge */}
+          {/* Source + type badges */}
           <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between">
             <div className="flex items-center gap-1 text-xs text-gray-300 bg-navy/60 backdrop-blur-sm px-2 py-1 rounded-lg">
               <ExternalLink className="w-3 h-3" />
@@ -108,7 +138,7 @@ export function ListingCard({ listing, index }: { listing: ExtractedListing; ind
             </p>
           </div>
 
-          {/* Stats row */}
+          {/* Stats */}
           <div className="flex items-center gap-4 text-sm text-gray-400 mb-3">
             {listing.length_ft ? (
               <span className="flex items-center gap-1">
@@ -132,15 +162,13 @@ export function ListingCard({ listing, index }: { listing: ExtractedListing; ind
             ) : null}
           </div>
 
-          {/* Luxury stars */}
+          {/* Stars */}
           {listing.luxury_level > 0 && (
             <div className="flex items-center gap-0.5 mb-3">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Star
                   key={i}
-                  className={`w-3.5 h-3.5 ${
-                    i < listing.luxury_level ? "text-gold fill-gold" : "text-gray-700"
-                  }`}
+                  className={`w-3.5 h-3.5 ${i < listing.luxury_level ? "text-gold fill-gold" : "text-gray-700"}`}
                 />
               ))}
             </div>
@@ -150,10 +178,7 @@ export function ListingCard({ listing, index }: { listing: ExtractedListing; ind
           {listing.match_reasons?.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-3">
               {listing.match_reasons.slice(0, 3).map((reason, i) => (
-                <span
-                  key={i}
-                  className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/10"
-                >
+                <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/10">
                   {reason}
                 </span>
               ))}
@@ -173,9 +198,7 @@ export function ListingCard({ listing, index }: { listing: ExtractedListing; ind
                   <span className="text-xl font-light text-white">
                     {currency}{formatPrice(price)}
                   </span>
-                  {priceLabel && (
-                    <span className="text-sm text-gray-400 ml-1">{priceLabel}</span>
-                  )}
+                  {priceLabel && <span className="text-sm text-gray-400 ml-1">{priceLabel}</span>}
                 </>
               ) : (
                 <span className="text-sm text-gray-400">Price on request</span>

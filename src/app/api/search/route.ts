@@ -114,36 +114,50 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // Attach images
+        // Attach images — track used images so each boat gets a unique one
+        const usedImageUrls = new Set<string>();
+
         for (const listing of allListings) {
-          if (listing.image_url) continue;
+          if (listing.image_url) {
+            usedImageUrls.add(listing.image_url);
+            continue;
+          }
 
           const nameLower = (listing.name || "").toLowerCase();
           const parts = nameLower.split(/[\s/]+/).filter(w => w.length > 2);
 
+          // Strategy 1: Name match
           for (const img of imageResults) {
+            if (usedImageUrls.has(img.imageUrl)) continue;
             const t = img.title.toLowerCase();
             if (parts.some(p => t.includes(p))) {
               listing.image_url = img.imageUrl;
+              usedImageUrls.add(img.imageUrl);
               break;
             }
           }
 
+          // Strategy 2: Brand/model match
           if (!listing.image_url && (listing.brand || listing.model)) {
             const bm = `${listing.brand || ""} ${listing.model || ""}`.toLowerCase().trim();
             for (const img of imageResults) {
+              if (usedImageUrls.has(img.imageUrl)) continue;
               if (img.title.toLowerCase().includes(bm)) {
                 listing.image_url = img.imageUrl;
+                usedImageUrls.add(img.imageUrl);
                 break;
               }
             }
           }
 
+          // Strategy 3: Domain match
           if (!listing.image_url) {
             const d = getDomain(listing.source_url).split(".")[0];
             for (const img of imageResults) {
+              if (usedImageUrls.has(img.imageUrl)) continue;
               if (getDomain(img.link).includes(d)) {
                 listing.image_url = img.imageUrl;
+                usedImageUrls.add(img.imageUrl);
                 break;
               }
             }
