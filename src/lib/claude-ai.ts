@@ -3,8 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 let _client: Anthropic | null = null;
 function getClient(): Anthropic {
   if (!_client) {
-    const key = process.env.BOAT_ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY;
-    if (!key) throw new Error("BOAT_ANTHROPIC_KEY is not set");
+    const key = process.env.ANTHROPIC_API_KEY || process.env.BOAT_ANTHROPIC_KEY;
+    if (!key) throw new Error("ANTHROPIC_API_KEY is not set");
     _client = new Anthropic({ apiKey: key });
   }
   return _client;
@@ -58,9 +58,110 @@ export interface ExtractedListing {
   image_url?: string;
 }
 
+/** Fallback parser when AI is unavailable — extracts basics from raw text */
+function fallbackParse(raw: string): ParsedUserQuery {
+  const lower = raw.toLowerCase();
+
+  // Detect boat type
+  let boat_type: string | undefined;
+  if (/motor|speed|rib/i.test(lower)) boat_type = "motor";
+  else if (/segel|sail/i.test(lower)) boat_type = "sailing";
+  else if (/katamaran|catamaran/i.test(lower)) boat_type = "catamaran";
+  else if (/yacht/i.test(lower)) boat_type = "motor";
+  else if (/hausboot|houseboat/i.test(lower)) boat_type = "houseboat";
+
+  // Detect intent
+  let intent: "charter" | "buy" | "explore" = "charter";
+  if (/kauf|buy|acheter|comprar/i.test(lower)) intent = "buy";
+
+  // Detect budget
+  let budget_per_day: number | undefined;
+  let budget_max: number | undefined;
+  const budgetMatch = lower.match(/(\d+)\s*€?\s*(pro\s*tag|per\s*day|\/tag|\/day)/);
+  if (budgetMatch) budget_per_day = Number(budgetMatch[1]);
+  const weekMatch = lower.match(/(\d+)\s*€?\s*(pro\s*woche|per\s*week|\/woche|\/week)/);
+  if (weekMatch) budget_max = Number(weekMatch[1]);
+  if (budget_per_day && !budget_max) budget_max = budget_per_day * 7;
+
+  // Detect guests
+  let guests: number | undefined;
+  const guestMatch = lower.match(/(\d+)\s*(pers|gäste|guests|personen|people|pax)/);
+  if (guestMatch) guests = Number(guestMatch[1]);
+
+  // Detect location — check known destinations
+  const LOCATIONS: Record<string, { country: string; city?: string; region?: string }> = {
+    mallorca: { country: "Spain", city: "Mallorca", region: "Mediterranean" },
+    ibiza: { country: "Spain", city: "Ibiza", region: "Mediterranean" },
+    kroatien: { country: "Croatia", region: "Mediterranean" },
+    croatia: { country: "Croatia", region: "Mediterranean" },
+    griechenland: { country: "Greece", region: "Mediterranean" },
+    greece: { country: "Greece", region: "Mediterranean" },
+    italien: { country: "Italy", region: "Mediterranean" },
+    italy: { country: "Italy", region: "Mediterranean" },
+    sardinien: { country: "Italy", city: "Sardinia", region: "Mediterranean" },
+    sardinia: { country: "Italy", city: "Sardinia", region: "Mediterranean" },
+    spanien: { country: "Spain", region: "Mediterranean" },
+    spain: { country: "Spain", region: "Mediterranean" },
+    frankreich: { country: "France", region: "Mediterranean" },
+    france: { country: "France", region: "Mediterranean" },
+    türkei: { country: "Turkey", region: "Mediterranean" },
+    tuerkei: { country: "Turkey", region: "Mediterranean" },
+    turkey: { country: "Turkey", region: "Mediterranean" },
+    split: { country: "Croatia", city: "Split", region: "Mediterranean" },
+    dubrovnik: { country: "Croatia", city: "Dubrovnik", region: "Mediterranean" },
+    athen: { country: "Greece", city: "Athens", region: "Mediterranean" },
+    athens: { country: "Greece", city: "Athens", region: "Mediterranean" },
+    barcelona: { country: "Spain", city: "Barcelona", region: "Mediterranean" },
+    hamburg: { country: "Germany", city: "Hamburg" },
+    amsterdam: { country: "Netherlands", city: "Amsterdam" },
+    nizza: { country: "France", city: "Nice", region: "Mediterranean" },
+    nice: { country: "France", city: "Nice", region: "Mediterranean" },
+    korsika: { country: "France", city: "Corsica", region: "Mediterranean" },
+    corsica: { country: "France", city: "Corsica", region: "Mediterranean" },
+    bodrum: { country: "Turkey", city: "Bodrum", region: "Mediterranean" },
+    amalfi: { country: "Italy", city: "Amalfi", region: "Mediterranean" },
+    montenegro: { country: "Montenegro", region: "Mediterranean" },
+    malta: { country: "Malta", region: "Mediterranean" },
+  };
+
+  let country: string | undefined;
+  let city: string | undefined;
+  let region: string | undefined;
+  for (const [key, loc] of Object.entries(LOCATIONS)) {
+    if (lower.includes(key)) {
+      country = loc.country;
+      city = loc.city || city;
+      region = loc.region;
+      break;
+    }
+  }
+
+  // Build search query
+  const parts = [boat_type || "boat", city || country || "", intent === "buy" ? "for sale" : "charter rental"].filter(Boolean);
+
+  return {
+    intent,
+    region,
+    country,
+    city,
+    budget_max: budget_max,
+    budget_per_day: budget_per_day,
+    currency: "EUR",
+    boat_type,
+    guests,
+    date: undefined,
+    style: undefined,
+    keywords: raw.split(/\s+/).filter(w => w.length > 2),
+    raw,
+    corrected_query: raw,
+    optimized_search_query: parts.join(" "),
+  };
+}
+
 export async function parseUserQuery(raw: string): Promise<ParsedUserQuery> {
   const today = new Date().toISOString().split("T")[0];
 
+  try {
   const msg = await getClient().messages.create({
     model: MODEL,
     max_tokens: 600,
@@ -111,12 +212,17 @@ JSON only:
     optimized_search_query: json.optimized_search_query || undefined,
     raw,
   };
+  } catch (err) {
+    console.error("[AI] parseUserQuery failed, using fallback parser:", err);
+    return fallbackParse(raw);
+  }
 }
 
 export async function extractBoatsFromPages(
   pages: { url: string; title: string; content: string }[],
   parsedQuery: ParsedUserQuery
 ): Promise<ExtractedListing[]> {
+  try {
   const pagesText = pages
     .map((p, i) => `[PAGE ${i + 1}] ${p.url}\n${p.title}\n${p.content.slice(0, 5000)}`)
     .join("\n---\n");
@@ -166,12 +272,17 @@ JSON array only — each item is ONE boat:
   } catch {
     return [];
   }
+  } catch (err) {
+    console.error("[AI] extractBoatsFromPages failed:", err);
+    return [];
+  }
 }
 
 export async function extractListingsFromSearchResults(
   searchResults: { title: string; link: string; snippet: string }[],
   parsedQuery: ParsedUserQuery
 ): Promise<ExtractedListing[]> {
+  try {
   const resultsText = searchResults
     .map((r, i) => `[${i + 1}] ${r.title} | ${r.link} | ${r.snippet}`)
     .join("\n");
@@ -208,6 +319,10 @@ JSON array only:
   try {
     return JSON.parse(text.replace(/```json?\n?/g, "").replace(/```/g, "").trim());
   } catch {
+    return [];
+  }
+  } catch (err) {
+    console.error("[AI] extractListingsFromSearchResults failed:", err);
     return [];
   }
 }

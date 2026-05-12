@@ -87,11 +87,11 @@ export async function GET(req: NextRequest) {
           parsed.intent === "buy" ? "for sale" : "charter",
         ].filter(Boolean).join(" ");
 
-        // Run EVERYTHING in parallel: location, search, images, scrapers, DB lookup
-        const [locationInfo, allResults, imageResults, platformListings, dbBoats] = await Promise.all([
+        // Run EVERYTHING in parallel — allSettled so one failure doesn't kill the rest
+        const settled = await Promise.allSettled([
           locationQuery ? resolveLocation(locationQuery) : Promise.resolve(null),
-          Promise.all(queries.map((query) => searchWeb(query, 10))),
-          searchImages(imageQuery, 20),
+          Promise.allSettled(queries.map((query) => searchWeb(query, 10))),
+          searchImages(imageQuery, 20).catch(() => []),
           scrapeAllPlatforms(locationQuery, parsed.boat_type),
           findCachedBoats({
             country: parsed.country || undefined,
@@ -101,8 +101,19 @@ export async function GET(req: NextRequest) {
             guests: parsed.guests || undefined,
             budgetPerDay: parsed.budget_per_day || undefined,
             currency: parsed.currency,
-          }),
+          }).catch(() => []),
         ]);
+
+        const locationInfo = settled[0].status === "fulfilled" ? settled[0].value : null;
+        const searchSettled = settled[1].status === "fulfilled"
+          ? (settled[1].value as PromiseSettledResult<{ title: string; link: string; snippet: string }[]>[])
+              .filter((r): r is PromiseFulfilledResult<{ title: string; link: string; snippet: string }[]> => r.status === "fulfilled")
+              .map(r => r.value)
+          : [];
+        const allResults = searchSettled;
+        const imageResults = settled[2].status === "fulfilled" ? (settled[2].value as { title: string; imageUrl: string; link: string }[]) : [];
+        const platformListings = settled[3].status === "fulfilled" ? settled[3].value as ExtractedListing[] : [];
+        const dbBoats = settled[4].status === "fulfilled" ? settled[4].value as ExtractedListing[] : [];
 
         if (locationInfo) {
           send("location", {
