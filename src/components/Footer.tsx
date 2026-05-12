@@ -5,7 +5,7 @@ export function Footer() {
     <footer className="border-t border-white/[0.04] py-6 px-4">
       <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
         <p className="text-xs text-gray-500 tracking-wider">
-          BOAT — THE FUTURE OF YACHT DISCOVERY
+          VELIQA — THE FUTURE OF YACHT DISCOVERY
         </p>
         <nav className="flex items-center gap-4 text-xs text-gray-500">
           <Link href="/datenschutz" className="hover:text-gray-300 transition-colors">

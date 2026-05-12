@@ -63,7 +63,7 @@ export default function Home() {
             className="text-gray-400 text-lg sm:text-xl mb-8 font-light tracking-wide animate-fade-in"
             style={{ animationDelay: "0.15s", opacity: 0 }}
           >
-            AI-Powered Yacht & Boat Discovery
+            AI-Powered Yacht & Boat Discovery — veliqa.life
           </p>
 
           {/* Search bar */}

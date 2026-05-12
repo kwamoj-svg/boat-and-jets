@@ -2,8 +2,8 @@ import { Navbar } from "@/components/Navbar";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Datenschutz — BOAT",
-  description: "Datenschutzerklarung von BOAT - AI-Powered Yacht Discovery",
+  title: "Datenschutz — VELIQA",
+  description: "Datenschutzerklarung von VELIQA (veliqa.life) - AI-Powered Yacht Discovery",
 };
 
 export default function DatenschutzPage() {
@@ -23,7 +23,7 @@ export default function DatenschutzPage() {
             <h2 className="text-xl text-white font-medium mt-8 mb-3">1. Verantwortlicher</h2>
             <p>
               Jerome Kwa<br />
-              E-Mail: kontakt@boat-discovery.com
+              E-Mail: kontakt@veliqa.life
             </p>
             <p>
               (Vollst&auml;ndige Angaben siehe <Link href="/impressum" className="text-gold-light hover:text-gold underline">Impressum</Link>)
@@ -33,7 +33,7 @@ export default function DatenschutzPage() {
           <section>
             <h2 className="text-xl text-white font-medium mt-8 mb-3">2. Erhebung und Verarbeitung personenbezogener Daten</h2>
             <p>
-              BOAT ist eine Suchmaschine f&uuml;r Yacht- und Bootsvermietung. Wir verarbeiten so wenig
+              VELIQA (veliqa.life) ist eine Suchmaschine f&uuml;r Yacht- und Bootsvermietung. Wir verarbeiten so wenig
               personenbezogene Daten wie m&ouml;glich (Grundsatz der Datenminimierung gem. Art. 5 Abs. 1 lit. c DSGVO).
             </p>
             <h3 className="text-lg text-white font-medium mt-4 mb-2">Was wir NICHT speichern:</h3>
@@ -55,7 +55,7 @@ export default function DatenschutzPage() {
           <section>
             <h2 className="text-xl text-white font-medium mt-8 mb-3">3. KI-Verarbeitung (EU AI Act)</h2>
             <p>
-              BOAT verwendet k&uuml;nstliche Intelligenz (KI) zur Verarbeitung von Suchanfragen und zur
+              VELIQA verwendet k&uuml;nstliche Intelligenz (KI) zur Verarbeitung von Suchanfragen und zur
               Erstellung von Bootsempfehlungen. Gem&auml;&szlig; dem EU AI Act (Verordnung (EU) 2024/1689)
               weisen wir darauf hin:
             </p>
@@ -70,7 +70,7 @@ export default function DatenschutzPage() {
           <section>
             <h2 className="text-xl text-white font-medium mt-8 mb-3">4. Cookies</h2>
             <p>
-              BOAT verwendet ausschlie&szlig;lich technisch notwendige Cookies f&uuml;r den Betrieb der Website.
+              VELIQA verwendet ausschlie&szlig;lich technisch notwendige Cookies f&uuml;r den Betrieb der Website.
               Wir setzen keine Marketing- oder Tracking-Cookies ein.
             </p>
             <ul className="list-disc pl-5 space-y-1">
@@ -83,7 +83,7 @@ export default function DatenschutzPage() {
           <section>
             <h2 className="text-xl text-white font-medium mt-8 mb-3">5. Externe Links &amp; Affiliate-Programm</h2>
             <p>
-              BOAT enth&auml;lt Links zu externen Boots- und Yachtvermietungsplattformen. Einige dieser Links
+              VELIQA enth&auml;lt Links zu externen Boots- und Yachtvermietungsplattformen. Einige dieser Links
               k&ouml;nnen Affiliate-Links sein, f&uuml;r die wir eine Provision erhalten. Diese Links sind
               entsprechend gekennzeichnet.
             </p>
@@ -114,7 +114,7 @@ export default function DatenschutzPage() {
               <li>Widerspruchsrecht (Art. 21 DSGVO)</li>
             </ul>
             <p className="mt-3">
-              Kontakt: kontakt@boat-discovery.com
+              Kontakt: kontakt@veliqa.life
             </p>
             <p>
               Beschwerderecht bei einer Aufsichtsbeh&ouml;rde gem. Art. 77 DSGVO.

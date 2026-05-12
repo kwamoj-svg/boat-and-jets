@@ -34,7 +34,7 @@ export function Logo({ size = "default" }: { size?: "small" | "default" | "large
         </svg>
       </div>
       <div className={`${textSizes[size]} tracking-[0.25em] font-light`}>
-        <span className="text-white">BOAT</span>
+        <span className="text-white">VELIQA</span>
       </div>
     </Link>
   );

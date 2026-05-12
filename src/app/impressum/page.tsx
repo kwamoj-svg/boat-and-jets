@@ -2,8 +2,8 @@ import { Navbar } from "@/components/Navbar";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Impressum — BOAT",
-  description: "Impressum von BOAT - AI-Powered Yacht Discovery",
+  title: "Impressum — VELIQA",
+  description: "Impressum von VELIQA (veliqa.life) - AI-Powered Yacht Discovery",
 };
 
 export default function ImpressumPage() {
@@ -23,9 +23,10 @@ export default function ImpressumPage() {
             <h2 className="text-xl text-white font-medium mt-8 mb-3">Angaben gem&auml;&szlig; &sect; 5 TMG</h2>
             <p>
               Jerome Kwa<br />
-              BOAT — AI-Powered Yacht Discovery<br />
+              VELIQA — AI-Powered Yacht Discovery<br />
+              veliqa.life<br />
               <br />
-              E-Mail: kontakt@boat-discovery.com
+              E-Mail: kontakt@veliqa.life
             </p>
           </section>
 
@@ -55,9 +56,9 @@ export default function ImpressumPage() {
 
             <h3 className="text-lg text-white font-medium mt-4 mb-2">KI-generierte Inhalte</h3>
             <p>
-              BOAT verwendet k&uuml;nstliche Intelligenz zur Erstellung von Bootsempfehlungen und Suchergebnissen.
+              VELIQA verwendet k&uuml;nstliche Intelligenz zur Erstellung von Bootsempfehlungen und Suchergebnissen.
               Diese KI-generierten Inhalte k&ouml;nnen Fehler oder Ungenauigkeiten enthalten. Preise, Verf&uuml;gbarkeiten
-              und Bootsdetails sollten stets beim jeweiligen Anbieter verifiziert werden. BOAT &uuml;bernimmt keine
+              und Bootsdetails sollten stets beim jeweiligen Anbieter verifiziert werden. VELIQA &uuml;bernimmt keine
               Haftung f&uuml;r die Richtigkeit KI-generierter Empfehlungen.
             </p>
           </section>
@@ -65,7 +66,7 @@ export default function ImpressumPage() {
           <section>
             <h2 className="text-xl text-white font-medium mt-8 mb-3">Affiliate-Hinweis</h2>
             <p>
-              BOAT enth&auml;lt Affiliate-Links zu Boots- und Yachtvermietungsplattformen. Wenn Sie &uuml;ber
+              VELIQA enth&auml;lt Affiliate-Links zu Boots- und Yachtvermietungsplattformen. Wenn Sie &uuml;ber
               diese Links eine Buchung vornehmen, erhalten wir m&ouml;glicherweise eine Provision. Dies hat
               keinen Einfluss auf die Reihenfolge oder Auswahl der angezeigten Ergebnisse. Alle Affiliate-Links
               sind entsprechend gekennzeichnet.
