@@ -23,7 +23,9 @@ interface ParsedQuery {
   intent: string;
   region?: string;
   country?: string;
+  city?: string;
   budget_max?: number;
+  budget_per_day?: number;
   currency: string;
   boat_type?: string;
   guests?: number;
@@ -31,6 +33,14 @@ interface ParsedQuery {
   style?: string;
   keywords: string[];
   corrected_query?: string;
+  optimized_search_query?: string;
+}
+
+interface LocationData {
+  address: string;
+  lat: number;
+  lng: number;
+  marinas: { name: string; address: string; rating?: number }[];
 }
 
 type SortKey = "match" | "price_asc" | "price_desc" | "guests" | "length";
@@ -133,6 +143,7 @@ function SearchContent() {
   const [totalFound, setTotalFound] = useState(0);
   const [platformsSearched, setPlatformsSearched] = useState(0);
   const [pagesAnalyzed, setPagesAnalyzed] = useState(0);
+  const [locationData, setLocationData] = useState<LocationData | null>(null);
 
   // Filters
   const [intent, setIntent] = useState("all");
@@ -160,6 +171,7 @@ function SearchContent() {
     setTotalFound(0);
     setPlatformsSearched(0);
     setPagesAnalyzed(0);
+    setLocationData(null);
     resetFilters();
     setSortBy("match");
 
@@ -193,6 +205,7 @@ function SearchContent() {
               switch (currentEvent) {
                 case "stage": setStageMessage(data.message); break;
                 case "parsed": setParsed(data); break;
+                case "location": setLocationData(data); break;
                 case "listing":
                   setListings((prev) => [...prev, data]);
                   setLoading(false);
@@ -358,6 +371,21 @@ function SearchContent() {
             )}
 
             {parsed && <QueryInsight parsed={parsed} />}
+
+            {/* Location & nearby marinas */}
+            {locationData && locationData.marinas.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mb-5">
+                <span className="text-xs text-gray-500 uppercase tracking-wider mr-1">
+                  <MapPin className="w-3 h-3 inline mr-1" />
+                  Marinas:
+                </span>
+                {locationData.marinas.slice(0, 4).map((m, i) => (
+                  <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-300 border border-blue-500/15">
+                    {m.name}{m.rating ? ` ★${m.rating}` : ""}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Filter bar */}
             <div className="flex flex-wrap items-center gap-2 mb-5">

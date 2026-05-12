@@ -6,6 +6,7 @@ import {
   extractListingsFromSearchResults,
 } from "@/lib/claude-ai";
 import type { ExtractedListing } from "@/lib/claude-ai";
+import { resolveLocation, marinasToSearchContext } from "@/lib/google-places";
 
 export const maxDuration = 45;
 
@@ -38,6 +39,23 @@ export async function GET(req: NextRequest) {
         send("stage", { stage: "parsing", message: "Understanding your search..." });
         const parsed = await parseUserQuery(q);
         send("parsed", parsed);
+
+        // Stage 1.5: Resolve location via Google Places (parallel-safe, non-blocking)
+        const locationQuery = [parsed.city, parsed.country, parsed.region].filter(Boolean).join(" ");
+        const locationInfo = locationQuery ? await resolveLocation(locationQuery) : null;
+
+        if (locationInfo) {
+          const marinaNames = marinasToSearchContext(locationInfo.marinas);
+          send("location", {
+            address: locationInfo.formatted_address,
+            lat: locationInfo.lat,
+            lng: locationInfo.lng,
+            marinas: locationInfo.marinas.slice(0, 5),
+          });
+          if (marinaNames && !parsed.optimized_search_query?.includes("marina")) {
+            parsed.optimized_search_query = (parsed.optimized_search_query || "") + ` ${marinaNames.split(",").slice(0, 3).join(" ")}`;
+          }
+        }
 
         // Stage 2: Search — 8 queries + images in parallel
         send("stage", { stage: "searching", message: "Searching 50+ platforms worldwide..." });
