@@ -16,6 +16,10 @@ import {
   Users,
   MapPin,
   Euro,
+  Ruler,
+  Anchor,
+  UserCheck,
+  Search,
 } from "lucide-react";
 import type { ExtractedListing } from "@/lib/claude-ai";
 
@@ -68,6 +72,25 @@ const GUEST_RANGES = [
   { label: "5–8 Gäste", min: 5, max: 8 },
   { label: "9–12 Gäste", min: 9, max: 12 },
   { label: "13+ Gäste", min: 13 },
+];
+const LENGTH_RANGES = [
+  { label: "Alle Längen", min: 0, max: Infinity },
+  { label: "Unter 10m", min: 0, max: 32.8 },
+  { label: "10–15m", min: 32.8, max: 49.2 },
+  { label: "15–20m", min: 49.2, max: 65.6 },
+  { label: "20–30m", min: 65.6, max: 98.4 },
+  { label: "Über 30m", min: 98.4, max: Infinity },
+];
+const CABIN_RANGES = [
+  { label: "Alle", min: 0, max: Infinity },
+  { label: "1–2 Kabinen", min: 1, max: 2 },
+  { label: "3–4 Kabinen", min: 3, max: 4 },
+  { label: "5+ Kabinen", min: 5, max: Infinity },
+];
+const CREW_OPTIONS = [
+  { label: "Alle", value: "all" },
+  { label: "Mit Crew", value: "with" },
+  { label: "Ohne Crew", value: "without" },
 ];
 
 function getPrice(l: ExtractedListing): number {
@@ -150,6 +173,10 @@ function SearchContent() {
   const [boatType, setBoatType] = useState("all");
   const [priceRange, setPriceRange] = useState("all");
   const [guestRange, setGuestRange] = useState("all");
+  const [lengthRange, setLengthRange] = useState("all");
+  const [cabinRange, setCabinRange] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [crewFilter, setCrewFilter] = useState("all");
   const [sortBy, setSortBy] = useState<SortKey>("match");
   const [showSortMenu, setShowSortMenu] = useState(false);
 
@@ -158,9 +185,13 @@ function SearchContent() {
     setBoatType("all");
     setPriceRange("all");
     setGuestRange("all");
+    setLengthRange("all");
+    setCabinRange("all");
+    setLocationFilter("");
+    setCrewFilter("all");
   };
 
-  const hasActiveFilters = intent !== "all" || boatType !== "all" || priceRange !== "all" || guestRange !== "all";
+  const hasActiveFilters = intent !== "all" || boatType !== "all" || priceRange !== "all" || guestRange !== "all" || lengthRange !== "all" || cabinRange !== "all" || locationFilter !== "" || crewFilter !== "all";
 
   const startStream = useCallback(async (query: string, signal: AbortSignal) => {
     setLoading(true);
@@ -288,8 +319,50 @@ function SearchContent() {
       }
     }
 
+    // Length range
+    if (lengthRange !== "all") {
+      const range = LENGTH_RANGES[parseInt(lengthRange)];
+      if (range) {
+        result = result.filter(l => {
+          const len = l.length_ft ?? 0;
+          if (len === 0) return false;
+          return len >= range.min && len <= range.max;
+        });
+      }
+    }
+
+    // Cabin range
+    if (cabinRange !== "all") {
+      const range = CABIN_RANGES[parseInt(cabinRange)];
+      if (range) {
+        result = result.filter(l => {
+          const c = l.cabins ?? 0;
+          if (c === 0) return false;
+          return c >= range.min && c <= range.max;
+        });
+      }
+    }
+
+    // Location filter (text match on country, region, port)
+    if (locationFilter.trim()) {
+      const search = locationFilter.trim().toLowerCase();
+      result = result.filter(l => {
+        const loc = `${l.country || ""} ${l.region || ""} ${l.port || ""}`.toLowerCase();
+        return loc.includes(search);
+      });
+    }
+
+    // Crew filter
+    if (crewFilter !== "all") {
+      result = result.filter(l => {
+        if (crewFilter === "with") return !!l.crew && l.crew > 0;
+        if (crewFilter === "without") return !l.crew || l.crew === 0;
+        return true;
+      });
+    }
+
     return applySorting(result, sortBy);
-  }, [listings, intent, boatType, priceRange, guestRange, sortBy]);
+  }, [listings, intent, boatType, priceRange, guestRange, lengthRange, cabinRange, locationFilter, crewFilter, sortBy]);
 
   const hasResults = listings.length > 0;
 
@@ -447,6 +520,62 @@ function SearchContent() {
                 ]}
               />
 
+              {/* Length range */}
+              <DropdownFilter
+                label="Länge"
+                icon={<Ruler className="w-4 h-4" />}
+                value={lengthRange}
+                onChange={setLengthRange}
+                options={[
+                  { label: "Alle Längen", value: "all" },
+                  ...LENGTH_RANGES.slice(1).map((r, i) => ({ label: r.label, value: String(i + 1) })),
+                ]}
+              />
+
+              {/* Cabins range */}
+              <DropdownFilter
+                label="Kabinen"
+                icon={<Anchor className="w-4 h-4" />}
+                value={cabinRange}
+                onChange={setCabinRange}
+                options={[
+                  { label: "Alle", value: "all" },
+                  ...CABIN_RANGES.slice(1).map((r, i) => ({ label: r.label, value: String(i + 1) })),
+                ]}
+              />
+
+              {/* Crew filter */}
+              <DropdownFilter
+                label="Crew"
+                icon={<UserCheck className="w-4 h-4" />}
+                value={crewFilter}
+                onChange={setCrewFilter}
+                options={CREW_OPTIONS}
+              />
+
+              {/* Location filter */}
+              <div className="relative">
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-colors ${
+                  locationFilter
+                    ? "bg-gold/10 border-gold/30"
+                    : "bg-white/[0.04] border-white/[0.08] hover:border-gold/20"
+                }`}>
+                  <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
+                  <input
+                    type="text"
+                    value={locationFilter}
+                    onChange={(e) => setLocationFilter(e.target.value)}
+                    placeholder="Ort filtern..."
+                    className="bg-transparent border-none outline-none text-sm text-gray-300 placeholder-gray-500 w-24 sm:w-32"
+                  />
+                  {locationFilter && (
+                    <button onClick={() => setLocationFilter("")} className="text-gray-500 hover:text-gray-300">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Clear filters */}
               {hasActiveFilters && (
                 <button
@@ -491,11 +620,14 @@ function SearchContent() {
               </div>
             </div>
 
-            {/* Filter count */}
+            {/* Results count badge */}
             {hasActiveFilters && (
-              <p className="text-sm text-gray-500 mb-4">
-                {filtered.length} von {listings.length} Ergebnissen
-              </p>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gold/10 border border-gold/20 text-sm text-gold-light">
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  {filtered.length} von {listings.length} Ergebnissen
+                </span>
+              </div>
             )}
 
             {/* Grid */}
