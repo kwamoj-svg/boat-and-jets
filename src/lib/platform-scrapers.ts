@@ -745,10 +745,11 @@ async function scrapeClickAndBoatSitemap(location: string, boatType?: string): P
         if (ogTitle) {
           let title = ogTitle[1]
             .replace(/\s*[-|–]\s*Click.*$/i, "")
-            .replace(/Boot mieten\s*/i, "")
-            .replace(/Bootsverleih\s*/i, "")
             .replace(/&#0?39;/g, "'").replace(/&amp;/g, "&").trim();
-          if (title.length > 3) b.name = title;
+          // Skip generic "Segelboot mieten Trogir" etc — keep the slug-based name
+          const isGenericTitle = /^(Segel|Motor|Haus)?boot\s*(mieten|verleih|chartern|rental)/i.test(title)
+            || /^(Louer|Rent|Alquilar)\s+(un\s+)?bateau/i.test(title);
+          if (!isGenericTitle && title.length > 3) b.name = title;
         }
         // Try og:image
         const ogImg = html.match(/og:image['"]\s*content=['"](https?:\/\/[^'"]+)['"]/);
@@ -866,10 +867,12 @@ async function scrapeSamboatSitemap(location: string, boatType?: string): Promis
       if (ogTitle) {
         let title = ogTitle[1]
           .replace(/\s*[-|]\s*Samboat.*$/i, "")
-          .replace(/Boot mieten\s*/i, "")
           .replace(/^Mieten Sie ein(?:e|en)?\s+(?:Segelboot|Motorboot|Katamaran|Yacht|Hausboot|Schlauchboot|Boot)\s*/i, "")
           .replace(/&#0?39;/g, "'").replace(/&amp;/g, "&").trim();
-        if (title.length > 3) b.name = title;
+        // Skip generic "Segelboot mieten Trogir" etc — keep the slug-based name
+        const isGenericTitle = /^(Segel|Motor|Haus)?boot\s*(mieten|verleih|chartern|rental)/i.test(title)
+          || /^(Louer|Rent|Alquilar)\s+(un\s+)?bateau/i.test(title);
+        if (!isGenericTitle && title.length > 3) b.name = title;
       }
       const ogImg = html.match(/og:image['"]\s*content=['"](https?:\/\/[^'"]+)['"]/);
       if (ogImg) b.image_url = ogImg[1];

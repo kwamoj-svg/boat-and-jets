@@ -129,7 +129,9 @@ function postProcess(listings: ExtractedListing[], parsed: ParsedUserQuery): Ext
 
     // Clean up names
     if (l.name) {
-      l.name = l.name.replace(/\s+[A-Za-z0-9]{5,8}$/g, "").trim();
+      // Remove trailing hash/database IDs (mixed alpha+digits like "B995yjk", "x458e", "6r987e4")
+      // but NOT real words like "Cruiser", "Impression", "Bavaria"
+      l.name = l.name.replace(/\s+(?=[A-Za-z]*\d)[A-Za-z0-9]{4,8}$/g, "").trim();
       const words = l.name.split(" ");
       if (words.length >= 3 && words[0].toLowerCase() === words[1].toLowerCase()) {
         l.name = words.slice(1).join(" ");
