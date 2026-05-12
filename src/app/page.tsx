@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { Logo } from "@/components/Logo";
 import { SearchInput } from "@/components/SearchInput";
 import { FilterBar } from "@/components/FilterBar";
+import { ExperienceChips } from "@/components/ExperienceChips";
 import { GlobeCanvas } from "@/components/GlobeCanvas";
 import { Waves, Shield, Sparkles, Globe } from "lucide-react";
 import { Footer } from "@/components/Footer";
@@ -84,6 +85,7 @@ export default function Home() {
                 onDestinationHover={handleDestHover}
                 onDestinationSelect={handleDestSelect}
               />
+              <ExperienceChips />
             </div>
           )}
         </div>

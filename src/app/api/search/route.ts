@@ -17,6 +17,7 @@ import {
   bulkFindDetailUrls,
 } from "@/lib/database";
 import { upgradeAllUrls } from "@/lib/platform-urls";
+import { detectExperience, applyExperienceFilters } from "@/lib/experience-search";
 
 export const maxDuration = 60;
 
@@ -258,6 +259,9 @@ export async function GET(req: NextRequest) {
         const fastParsed = await aiParsePromise;
         send("parsed", fastParsed);
 
+        // Detect experience-based intent
+        const experience = detectExperience(q);
+
         const locationQuery = [fastParsed.city, fastParsed.country, fastParsed.region].filter(Boolean).join(" ");
 
         send("stage", { stage: "searching", message: "Durchsuche 50+ Plattformen..." });
@@ -303,6 +307,7 @@ export async function GET(req: NextRequest) {
 
         // Post-process Phase 1
         phase1Results = postProcess(phase1Results, fastParsed);
+        if (experience) applyExperienceFilters(phase1Results, experience);
 
         // Attach images to Phase 1 results
         const usedImageUrls = new Set<string>();
@@ -418,6 +423,7 @@ export async function GET(req: NextRequest) {
 
         // Post-process Phase 2
         phase2Results = postProcess(phase2Results, parsed);
+        if (experience) applyExperienceFilters(phase2Results, experience);
 
         // URL upgrader for Phase 2 results
         for (const l of phase2Results) {

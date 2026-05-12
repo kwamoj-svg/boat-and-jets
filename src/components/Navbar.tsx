@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { Logo } from "./Logo";
 import { SearchInput } from "./SearchInput";
+import { AuthButton } from "./AuthButton";
+import { NotificationBell } from "./NotificationBell";
 
 interface NavbarProps {
   showSearch?: boolean;
@@ -21,10 +24,15 @@ export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
             </div>
           )}
 
-          <div className="flex items-center gap-4">
-            <button className="text-sm text-gray-400 hover:text-white transition-colors">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/partner/register"
+              className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
+            >
               For Business
-            </button>
+            </Link>
+            <NotificationBell />
+            <AuthButton />
           </div>
         </div>
       </div>
