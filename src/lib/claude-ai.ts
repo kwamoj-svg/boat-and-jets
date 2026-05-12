@@ -146,7 +146,7 @@ QUALITY FILTER:
 - match_score: 0.85+ = perfect match, 0.7-0.84 = good, 0.5-0.69 = partial
 
 RULES:
-1. Extract AS MANY boats as possible. Max 20. The more the better.
+1. Extract AS MANY boats as possible. Max 25. The more the better.
 2. source_url: Use DIRECT boat detail URL from [BOAT LINKS: ...]. NEVER use homepage/category URLs.
 3. image_url: Match from [IMAGES: ...] to each boat.
 4. Diversify across pages. Be exact with prices (per day/week/sale).

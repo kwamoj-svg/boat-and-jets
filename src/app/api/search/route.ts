@@ -94,8 +94,8 @@ export async function GET(req: NextRequest) {
           return true;
         });
 
-        // Stage 3: Fetch 15 pages in parallel (faster timeout)
-        const topPages = diverseResults.slice(0, 15);
+        // Stage 3: Fetch 20 pages in parallel (faster timeout)
+        const topPages = diverseResults.slice(0, 20);
         const pageContents = await Promise.all(
           topPages.map(async (r) => {
             const content = await fetchPageContent(r.link);
@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
           pagesWithContent.length > 0
             ? extractBoatsFromPages(pagesWithContent, parsed)
             : Promise.resolve([]),
-          extractListingsFromSearchResults(uniqueResults.slice(0, 25), parsed),
+          extractListingsFromSearchResults(uniqueResults.slice(0, 40), parsed),
         ]);
 
         // Stage 5: Merge + dedupe (platform scrapers + AI extractions)
@@ -202,17 +202,17 @@ export async function GET(req: NextRequest) {
         const ranked = await semanticRank(searchText, allListings);
         const rankedListings = ranked.length > 0 ? ranked : allListings;
 
-        // Sort + diversify (max 3 per domain)
+        // Sort + diversify (max 8 per domain)
         rankedListings.sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0));
 
         const sourceCounts = new Map<string, number>();
         const finalListings = rankedListings.filter((l) => {
           const domain = getDomain(l.source_url);
           const count = sourceCounts.get(domain) || 0;
-          if (count >= 3) return false;
+          if (count >= 8) return false;
           sourceCounts.set(domain, count + 1);
           return true;
-        }).slice(0, 20);
+        }).slice(0, 50);
 
         // Stream results
         const finalPlatforms = new Set(finalListings.map(l => getDomain(l.source_url))).size;
