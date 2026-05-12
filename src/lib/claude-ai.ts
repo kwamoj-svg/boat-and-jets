@@ -124,8 +124,8 @@ export async function extractBoatsFromPages(
   const search = parsedQuery.corrected_query || parsedQuery.raw;
   const loc = parsedQuery.country || parsedQuery.region || "any";
   const budget = parsedQuery.budget_per_day
-    ? `${parsedQuery.currency}${parsedQuery.budget_per_day}/day (${parsedQuery.currency}${parsedQuery.budget_max}/week)`
-    : parsedQuery.budget_max ? `${parsedQuery.currency}${parsedQuery.budget_max}` : "any";
+    ? `MAX ${parsedQuery.currency}${parsedQuery.budget_per_day}/day`
+    : parsedQuery.budget_max ? `MAX ${parsedQuery.currency}${parsedQuery.budget_max}/week` : "any";
 
   const msg = await getClient().messages.create({
     model: MODEL,
@@ -133,32 +133,29 @@ export async function extractBoatsFromPages(
     messages: [
       {
         role: "user",
-        content: `Extract boats available for ${parsedQuery.intent === "buy" ? "PURCHASE" : "PRIVATE CHARTER/RENTAL"} from these pages.
+        content: `Extract INDIVIDUAL boats for ${parsedQuery.intent === "buy" ? "PURCHASE" : "PRIVATE CHARTER/RENTAL"}.
 
 Search: "${search}" | Location: ${loc} | Budget: ${budget} | Type: ${parsedQuery.boat_type || "any"} | Guests: ${parsedQuery.guests || "any"}
 
 ${pagesText}
 
-QUALITY FILTER:
-- REJECT: ferries, passenger ships, sailing schools, harbor cruises, sightseeing boats, water taxis
-- INCLUDE: any boat/yacht you can rent, charter, or book privately — even if price is missing
-- If a page lists multiple boats (e.g. a fleet page), extract EACH individual boat separately
-- match_score: 0.85+ = perfect match, 0.7-0.84 = good, 0.5-0.69 = partial
+STRICT RULES:
+1. Each entry = ONE SPECIFIC BOAT with a real name (e.g. "Bavaria 46 Cruiser", "Beneteau Oceanis 38", "Lagoon 42").
+2. NEVER create entries like "Fleet", "Platform", "Collection", "Multiple boats", "Various". These are FORBIDDEN.
+3. NEVER use a platform name as the boat name (e.g. "Nautal Ibiza" or "Samboat Fleet" are WRONG).
+4. If a page is a listing page with multiple boats, extract each INDIVIDUAL boat by name.
+5. If you can't find individual boat names, skip that page entirely.
+${parsedQuery.budget_per_day ? `6. BUDGET FILTER: ONLY include boats at or below ${parsedQuery.currency}${parsedQuery.budget_per_day}/day. Skip expensive boats!` : ""}
+${parsedQuery.budget_max ? `6. BUDGET FILTER: ONLY include boats at or below ${parsedQuery.currency}${parsedQuery.budget_max}/week. Skip expensive boats!` : ""}
 
-CRITICAL URL RULES:
-1. source_url MUST be a URL for ONE SPECIFIC BOAT — a detail/product page with the boat name or ID in the URL path.
-   GOOD examples: /boot/concordia-102-ac-joanne, /yacht/sunseeker-50, /en/boat/12345, /listing/bavaria-46
-   BAD examples: /search, /results, /boats, /fleet, /yacht-charter/hamburg, /en/boat-rental/germany (these are CATEGORY pages!)
-2. Look in [BOAT DETAIL LINKS: ...] at the TOP of each page. Pick the URL matching each boat's name/model. These are the REAL booking pages.
-3. If no detail URL exists for a boat, use the best available URL but set match_score to 0.5.
-4. Extract AS MANY boats as possible. Max 25. The more the better.
-5. image_url: Match from [IMAGES: ...] to each boat.
-6. Diversify across pages. Be exact with prices (per day/week/sale).
-7. type: motor|sailing|catamaran|superyacht|speedboat|gulet
-8. country/port: Use the ACTUAL location of the boat, not just the search location.
+REJECT: ferries, passenger ships, sailing schools, harbor cruises, sightseeing, water taxis, fleet/platform entries
+INCLUDE: individual boats you can rent/charter/book privately
 
-JSON array only:
-[{"name":"","type":"","brand":null,"model":null,"year":null,"length_ft":null,"cabins":null,"guests":null,"crew":null,"price_per_week":null,"price_per_day":null,"sale_price":null,"currency":"EUR","region":"","country":"","port":null,"features":[],"description":"","source_url":"DIRECT BOAT URL","source_title":"","image_url":null,"luxury_level":3,"match_score":0.8,"match_reasons":[],"ai_summary":""}]`,
+source_url: Use URLs from [BOAT DETAIL LINKS: ...]. If none match, use the page URL.
+type: motor|sailing|catamaran|superyacht|speedboat|gulet
+
+JSON array only — each item is ONE boat:
+[{"name":"SPECIFIC BOAT NAME","type":"","brand":null,"model":null,"year":null,"length_ft":null,"cabins":null,"guests":null,"crew":null,"price_per_week":null,"price_per_day":null,"sale_price":null,"currency":"EUR","region":"","country":"","port":null,"features":[],"description":"","source_url":"","source_title":"","image_url":null,"luxury_level":3,"match_score":0.8,"match_reasons":[],"ai_summary":""}]`,
       },
     ],
   });
@@ -187,20 +184,22 @@ export async function extractListingsFromSearchResults(
     messages: [
       {
         role: "user",
-        content: `Extract boats for ${parsedQuery.intent === "buy" ? "PURCHASE" : "CHARTER/RENTAL"} from search snippets.
+        content: `Extract INDIVIDUAL boats for ${parsedQuery.intent === "buy" ? "PURCHASE" : "CHARTER/RENTAL"} from search snippets.
 Search: "${search}" | Location: ${parsedQuery.country || parsedQuery.region || "any"}
 
 ${resultsText}
 
-Rules:
-- Extract any boat/yacht available for ${parsedQuery.intent === "buy" ? "sale" : "charter or rental"}
-- REJECT only: tours, sailing schools, ferries, sightseeing
-- If a snippet mentions a platform with boats (e.g. "20+ boats available"), create a listing for that platform
-- source_url: PREFER URLs that point to a SPECIFIC BOAT page (containing boat name/slug/ID in path). If the search result URL is a category/search page, still use it but set match_score to 0.55.
-- Diversify across domains. Max 12.
+STRICT RULES:
+1. Each entry = ONE SPECIFIC BOAT with a real name (model name like "Bavaria 46", "Lagoon 42", etc.)
+2. NEVER create "Fleet", "Platform", "Collection" entries. FORBIDDEN.
+3. NEVER use website/platform names as boat names ("Nautal Ibiza" = WRONG, "Samboat Fleet" = WRONG)
+4. If a snippet only describes a platform (e.g. "20+ boats available in..."), SKIP it entirely.
+5. Only extract if the snippet mentions a SPECIFIC boat name/model.
+${parsedQuery.budget_per_day ? `6. BUDGET: Only boats at or under ${parsedQuery.currency}${parsedQuery.budget_per_day}/day.` : ""}
+Max 10. Diversify across domains.
 
 JSON array only:
-[{"name":"","type":"","brand":null,"model":null,"year":null,"length_ft":null,"cabins":null,"guests":null,"crew":null,"price_per_week":null,"price_per_day":null,"sale_price":null,"currency":"EUR","region":"","country":"","port":null,"features":[],"description":"","source_url":"","source_title":"","image_url":null,"luxury_level":3,"match_score":0.65,"match_reasons":[],"ai_summary":""}]`,
+[{"name":"SPECIFIC BOAT NAME","type":"","brand":null,"model":null,"year":null,"length_ft":null,"cabins":null,"guests":null,"crew":null,"price_per_week":null,"price_per_day":null,"sale_price":null,"currency":"EUR","region":"","country":"","port":null,"features":[],"description":"","source_url":"","source_title":"","image_url":null,"luxury_level":3,"match_score":0.65,"match_reasons":[],"ai_summary":""}]`,
       },
     ],
   });

@@ -218,6 +218,69 @@ export async function GET(req: NextRequest) {
           }
         }
 
+        // ── HARD POST-PROCESSING FILTERS ──
+        // These run AFTER AI extraction to guarantee clean results.
+        // AI prompts help but can't be trusted 100%.
+
+        const BANNED_NAME_WORDS = [
+          "fleet", "platform", "collection", "multiple", "various",
+          "diverse", "selection", "listing", "listings", "overview",
+          "angebote", "flotte", "auswahl",
+        ];
+        const KNOWN_PLATFORMS = [
+          "nautal", "samboat", "click-boat", "clickboat", "boataround",
+          "getmyboat", "zizoo", "sailo", "12knots", "charterworld",
+          "boatbookings", "moorings", "dreamyacht", "yachtcharterfleet",
+          "master yachting", "scansail", "sunsail", "tubber", "happycharter",
+          "argos nautika", "yacht pool", "filovent", "globe sailor",
+          "globesailor", "incrediblue", "borrowaboat",
+        ];
+
+        // Filter in-place
+        for (let i = allListings.length - 1; i >= 0; i--) {
+          const l = allListings[i];
+          const nameLower = (l.name || "").toLowerCase().trim();
+
+          // 1) Remove fleet/platform/collection entries
+          if (BANNED_NAME_WORDS.some(w => nameLower.includes(w))) {
+            allListings.splice(i, 1);
+            continue;
+          }
+
+          // 2) Remove entries where name is just a platform name
+          if (KNOWN_PLATFORMS.some(p => {
+            const cleaned = nameLower.replace(/[^a-z0-9\s]/g, "").trim();
+            return cleaned === p || cleaned.startsWith(p + " ") ||
+                   cleaned.endsWith(" " + p) ||
+                   // "Nautal Ibiza" or "Samboat Fleet" patterns
+                   (cleaned.split(/\s+/).length <= 3 && cleaned.includes(p));
+          })) {
+            allListings.splice(i, 1);
+            continue;
+          }
+
+          // 3) Remove entries with very short/generic names (< 3 chars or just numbers)
+          if (nameLower.length < 3 || /^\d+$/.test(nameLower)) {
+            allListings.splice(i, 1);
+            continue;
+          }
+
+          // 4) Budget enforcement — hard filter
+          if (parsed.budget_per_day && l.price_per_day) {
+            // Allow 30% tolerance (€300 budget → allow up to €390)
+            if (l.price_per_day > parsed.budget_per_day * 1.3) {
+              allListings.splice(i, 1);
+              continue;
+            }
+          }
+          if (parsed.budget_max && l.price_per_week) {
+            if (l.price_per_week > parsed.budget_max * 1.3) {
+              allListings.splice(i, 1);
+              continue;
+            }
+          }
+        }
+
         // Attach images — track used images so each boat gets a unique one
         const usedImageUrls = new Set<string>();
 
