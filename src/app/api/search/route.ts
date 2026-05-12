@@ -6,7 +6,7 @@ import {
   extractListingsFromSearchResults,
 } from "@/lib/claude-ai";
 
-export const maxDuration = 30;
+export const maxDuration = 45;
 
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q");
@@ -21,12 +21,13 @@ export async function GET(req: NextRequest) {
     // Stage 1: Parse user query with AI
     const parsed = await parseUserQuery(q);
 
-    // Stage 2: Search the web with multiple queries
+    // Stage 2: Blast the web with up to 10 parallel search queries
     const queries = buildSearchQueries(parsed);
     const allResults = await Promise.all(
       queries.map((query) => searchWeb(query, 10))
     );
 
+    // Dedupe by URL
     const seen = new Set<string>();
     const uniqueResults = allResults.flat().filter((r) => {
       if (seen.has(r.link)) return false;
@@ -34,8 +35,8 @@ export async function GET(req: NextRequest) {
       return true;
     });
 
-    // Stage 3: Fetch top 8 pages in parallel and extract real boat data
-    const topPages = uniqueResults.slice(0, 8);
+    // Stage 3: Fetch top 12 pages in parallel
+    const topPages = uniqueResults.slice(0, 12);
     const pageContents = await Promise.all(
       topPages.map(async (r) => {
         const content = await fetchPageContent(r.link);
@@ -45,18 +46,16 @@ export async function GET(req: NextRequest) {
 
     const pagesWithContent = pageContents.filter((p) => p.content.length > 200);
 
-    // Stage 4: Extract specific boats from fetched pages
-    let listings = pagesWithContent.length > 0
-      ? await extractBoatsFromPages(pagesWithContent, parsed)
-      : [];
+    // Stage 4: Run BOTH extraction methods in parallel
+    const [pageListings, snippetListings] = await Promise.all([
+      pagesWithContent.length > 0
+        ? extractBoatsFromPages(pagesWithContent, parsed)
+        : Promise.resolve([]),
+      extractListingsFromSearchResults(uniqueResults.slice(0, 20), parsed),
+    ]);
 
-    // Stage 5: Also extract from search snippets
-    const snippetListings = await extractListingsFromSearchResults(
-      uniqueResults.slice(0, 15),
-      parsed
-    );
-
-    // Merge, avoiding duplicates by name
+    // Stage 5: Merge results, dedupe by name
+    const listings = [...pageListings];
     const existingNames = new Set(listings.map((l) => l.name.toLowerCase()));
     for (const sl of snippetListings) {
       if (!existingNames.has(sl.name.toLowerCase())) {
@@ -70,7 +69,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       query: { raw_query: q, parsed },
-      recommendations: listings.slice(0, 10),
+      recommendations: listings.slice(0, 12),
       total_found: listings.length,
       search_id: crypto.randomUUID(),
     });
