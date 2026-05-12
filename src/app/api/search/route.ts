@@ -20,6 +20,10 @@ import { upgradeAllUrls } from "@/lib/platform-urls";
 
 export const maxDuration = 45;
 
+// DSGVO: Kein persistentes Logging von Nutzerdaten.
+// Suchanfragen werden session-basiert verarbeitet und nur anonymisiert
+// als Bootsdaten (keine personenbezogenen Daten) zwischengespeichert.
+
 function getDomain(url: string): string {
   try {
     return new URL(url).hostname.replace("www.", "");

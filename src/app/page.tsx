@@ -6,6 +6,8 @@ import { SearchInput } from "@/components/SearchInput";
 import { FilterBar } from "@/components/FilterBar";
 import { GlobeCanvas } from "@/components/GlobeCanvas";
 import { Waves, Shield, Sparkles, Globe } from "lucide-react";
+import { Footer } from "@/components/Footer";
+import { CookieBanner } from "@/components/CookieBanner";
 import type { DestinationName } from "@/components/FilterBar";
 
 export default function Home() {
@@ -104,12 +106,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-white/[0.04] py-6 px-4 text-center">
-        <p className="text-xs text-gray-500 tracking-wider">
-          BOAT — THE FUTURE OF YACHT DISCOVERY
-        </p>
-      </footer>
+      <Footer />
+      <CookieBanner />
     </main>
   );
 }

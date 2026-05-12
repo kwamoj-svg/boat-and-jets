@@ -4,6 +4,8 @@ import {
   scrapeBoataround,
   bulkScrapeMasterYachting,
   bulkScrapeBoataround,
+  bulkScrapeSamboat,
+  bulkScrapeClickAndBoat,
   MASTER_YACHTING_DESTINATIONS,
   BOATAROUND_BOAT_TYPES,
 } from "@/lib/bulk-scraper";
@@ -170,6 +172,42 @@ export async function GET(req: NextRequest) {
                   totalSaved,
                 });
               }
+            }
+          }
+        }
+
+        // ── Samboat ──
+        if (platform === "samboat" || platform === "all") {
+          send("progress", { platform: "samboat.de", destination: "all", status: "scraping" });
+          const boats = await bulkScrapeSamboat(
+            platform === "all" ? 200 : 300,
+            (p) => send("progress", p)
+          );
+          totalBoats += boats.length;
+          if (save && boats.length > 0) {
+            for (let i = 0; i < boats.length; i += 50) {
+              const batch = boats.slice(i, i + 50);
+              await saveBoats(batch);
+              totalSaved += batch.length;
+              send("saved", { platform: "samboat.de", batch: Math.floor(i / 50) + 1, count: batch.length, totalSaved });
+            }
+          }
+        }
+
+        // ── Click&Boat ──
+        if (platform === "clickandboat" || platform === "all") {
+          send("progress", { platform: "clickandboat.com", destination: "all", status: "scraping" });
+          const boats = await bulkScrapeClickAndBoat(
+            platform === "all" ? 200 : 300,
+            (p) => send("progress", p)
+          );
+          totalBoats += boats.length;
+          if (save && boats.length > 0) {
+            for (let i = 0; i < boats.length; i += 50) {
+              const batch = boats.slice(i, i + 50);
+              await saveBoats(batch);
+              totalSaved += batch.length;
+              send("saved", { platform: "clickandboat.com", batch: Math.floor(i / 50) + 1, count: batch.length, totalSaved });
             }
           }
         }

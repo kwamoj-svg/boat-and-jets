@@ -575,6 +575,316 @@ export async function bulkScrapeBoataround(
   return all;
 }
 
+/* ═══════════════════════════════════════════
+   SAMBOAT.DE SCRAPER
+   Uses XML sitemap — 40,000+ boats
+   URL pattern: /boot-mieten/[city]/[type]/[id]
+   ═══════════════════════════════════════════ */
+
+const SB_BASE = "https://www.samboat.de";
+
+function parseSBSitemap(xml: string): { url: string; city: string; type: string; id: string }[] {
+  const entries: { url: string; city: string; type: string; id: string }[] = [];
+  const locPattern = /<loc>(https:\/\/www\.samboat\.de\/boot-mieten\/[^<]+)<\/loc>/g;
+  let m;
+  while ((m = locPattern.exec(xml)) !== null) {
+    const url = m[1];
+    // Pattern: /boot-mieten/[city]/[boat-type]/[id]
+    const parts = url.replace(`${SB_BASE}/boot-mieten/`, "").split("/");
+    if (parts.length >= 3) {
+      entries.push({
+        url,
+        city: parts[0],
+        type: parts[1],
+        id: parts[2],
+      });
+    }
+  }
+  return entries;
+}
+
+function sbTypeToStandard(t: string): string {
+  if (t.includes("segel")) return "sailing";
+  if (t.includes("motor")) return "motor";
+  if (t.includes("katamaran")) return "catamaran";
+  if (t.includes("schlauchboot") || t.includes("rib")) return "speedboat";
+  if (t.includes("gulet")) return "gulet";
+  if (t.includes("hausboot")) return "motor";
+  if (t.includes("jetski") || t.includes("jet-ski")) return "speedboat";
+  return "motor";
+}
+
+/** Scrape Samboat via sitemap */
+export async function scrapeSamboat(
+  maxEntries = 300
+): Promise<ExtractedListing[]> {
+  const xml = await fetchWithTimeout(
+    `${SB_BASE}/sitemap_de_product_listings.xml`,
+    15000
+  );
+  if (!xml) return [];
+
+  const entries = parseSBSitemap(xml);
+  const allBoats: ExtractedListing[] = [];
+
+  // Take a diverse sample: spread across the sitemap
+  const step = Math.max(1, Math.floor(entries.length / maxEntries));
+  const sampled = entries.filter((_, i) => i % step === 0).slice(0, maxEntries);
+
+  for (const entry of sampled) {
+    const city = entry.city
+      .replace(/-/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    const type = sbTypeToStandard(entry.type);
+
+    // We don't have the boat name from the sitemap, so we'll
+    // create a descriptive name from city + type + ID
+    const typeName = entry.type
+      .replace(/-/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+    allBoats.push({
+      name: `${typeName} ${city} #${entry.id}`,
+      type,
+      brand: undefined,
+      model: undefined,
+      year: undefined,
+      length_ft: undefined,
+      cabins: undefined,
+      guests: undefined,
+      crew: undefined,
+      price_per_week: undefined,
+      price_per_day: undefined,
+      sale_price: undefined,
+      currency: "EUR",
+      region: "",
+      country: "",
+      port: city,
+      features: [],
+      description: `${typeName} available for charter in ${city} via Samboat.`,
+      source_url: entry.url,
+      source_title: `Samboat — ${typeName} in ${city}`,
+      luxury_level: 3,
+      match_score: 0.75,
+      match_reasons: ["Direct listing", "Samboat", "Verified detail URL"],
+      ai_summary: `${typeName} charter in ${city} via Samboat.`,
+      image_url: undefined,
+    });
+  }
+
+  // Enrich a sample with detail page data (get boat names, images, prices)
+  const enrichSample = allBoats.slice(0, 30);
+  const enrichResults = await Promise.allSettled(
+    enrichSample.map(async (b) => {
+      const html = await fetchWithTimeout(b.source_url, 4000);
+      if (!html) return null;
+
+      // Try og:title for boat name
+      const ogTitle = html.match(/og:title['"]\s*content=['"](.*?)['"]/);
+      if (ogTitle) {
+        let title = ogTitle[1]
+          .replace(/\s*[-|]\s*Samboat.*$/i, "")
+          .replace(/Boot mieten\s*/i, "")
+          .replace(/Bootsverleih\s*/i, "")
+          .replace(/^Mieten Sie ein(?:e|en)?\s+(?:Segelboot|Motorboot|Katamaran|Yacht|Hausboot|Schlauchboot|Boot)\s*/i, "")
+          .replace(/&#0?39;/g, "'")
+          .replace(/&amp;/g, "&")
+          .trim();
+        // Remove trailing city name if it duplicates the port
+        const cityLower = (b.port || "").toLowerCase();
+        if (cityLower && title.toLowerCase().endsWith(cityLower)) {
+          title = title.slice(0, -cityLower.length).trim();
+        }
+        if (title.length > 3) b.name = title;
+      }
+
+      // Try og:image
+      const ogImg = html.match(/og:image['"]\s*content=['"](https?:\/\/[^'"]+)['"]/);
+      if (ogImg) b.image_url = ogImg[1];
+
+      // Try to find price
+      const price = html.match(/(\d+)\s*€\s*\/\s*(?:Tag|jour|day)/i);
+      if (price) {
+        b.price_per_day = Number(price[1]);
+        b.price_per_week = b.price_per_day * 7;
+      }
+
+      // Country from breadcrumb or meta
+      const country = html.match(/"addressCountry"\s*:\s*"([^"]+)"/);
+      if (country) b.country = country[1];
+
+      return b;
+    })
+  );
+
+  return allBoats;
+}
+
+/* ═══════════════════════════════════════════
+   CLICK&BOAT SCRAPER
+   Uses XML sitemap — 25,000+ boats with images
+   URL: /de/boot-mieten/[city]/[type]/[brand]-[model]-[id]
+   ═══════════════════════════════════════════ */
+
+const CB_BASE = "https://www.clickandboat.com";
+
+function parseCBSitemap(xml: string): { url: string; images: string[] }[] {
+  const entries: { url: string; images: string[] }[] = [];
+  const blocks = xml.split("</url>");
+
+  for (const block of blocks) {
+    const locMatch = block.match(/<loc><!\[CDATA\[(https:\/\/www\.clickandboat\.com\/de\/boot-mieten\/[^\]]+)\]\]><\/loc>/);
+    if (!locMatch) continue;
+
+    const url = locMatch[1];
+    const images: string[] = [];
+    const imgPattern = /<image:loc>(https:\/\/[^<]+)<\/image:loc>/g;
+    let m;
+    while ((m = imgPattern.exec(block)) !== null && images.length < 3) {
+      images.push(m[1]);
+    }
+
+    entries.push({ url, images });
+  }
+  return entries;
+}
+
+function parseCBUrl(url: string): { city: string; type: string; slug: string } {
+  // /de/boot-mieten/marseille/motorboot/quicksilver-525-commander-x6g83
+  const path = url.replace(`${CB_BASE}/de/boot-mieten/`, "");
+  const parts = path.split("/");
+  return {
+    city: parts[0] || "",
+    type: parts[1] || "",
+    slug: parts[2] || "",
+  };
+}
+
+function cbTypeToStandard(t: string): string {
+  if (t.includes("segel")) return "sailing";
+  if (t.includes("motor")) return "motor";
+  if (t.includes("katamaran")) return "catamaran";
+  if (t.includes("schlauchboot") || t.includes("rib")) return "speedboat";
+  if (t.includes("gulet")) return "gulet";
+  if (t.includes("yacht")) return "motor";
+  return "motor";
+}
+
+function cbSlugToName(slug: string): { name: string; brand?: string; model?: string } {
+  // "quicksilver-525-commander-x6g83" → "Quicksilver 525 Commander"
+  // Remove the trailing hash ID (last segment after -)
+  const withoutId = slug.replace(/-[a-z0-9]{4,6}$/, "");
+  const parts = withoutId.split("-");
+  const name = parts
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
+
+  const brand = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : undefined;
+  let modelEnd = parts.length;
+  for (let i = 1; i < parts.length; i++) {
+    if (/^\d+$/.test(parts[i])) { modelEnd = i + 1; break; }
+  }
+  const model = parts.slice(1, modelEnd).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ") || undefined;
+
+  return { name, brand, model };
+}
+
+/** Scrape Click&Boat via sitemap */
+export async function scrapeClickAndBoat(
+  maxEntries = 300
+): Promise<ExtractedListing[]> {
+  // Fetch both German product sitemaps
+  const [xml0, xml1] = await Promise.all([
+    fetchWithTimeout(`${CB_BASE}/sitemaps/1707/CAB/products-de_0.xml`, 15000),
+    fetchWithTimeout(`${CB_BASE}/sitemaps/1707/CAB/products-de_1.xml`, 15000),
+  ]);
+
+  const entries0 = xml0 ? parseCBSitemap(xml0) : [];
+  const entries1 = xml1 ? parseCBSitemap(xml1) : [];
+  const allEntries = [...entries0, ...entries1];
+
+  if (allEntries.length === 0) return [];
+
+  // Take a diverse sample
+  const step = Math.max(1, Math.floor(allEntries.length / maxEntries));
+  const sampled = allEntries.filter((_, i) => i % step === 0).slice(0, maxEntries);
+
+  const allBoats: ExtractedListing[] = [];
+
+  for (const entry of sampled) {
+    const { city, type, slug } = parseCBUrl(entry.url);
+    const { name, brand, model } = cbSlugToName(slug);
+    const stdType = cbTypeToStandard(type);
+    const cityName = city
+      .replace(/-/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+    if (name.length < 3) continue;
+
+    allBoats.push({
+      name,
+      type: stdType,
+      brand,
+      model,
+      year: undefined,
+      length_ft: undefined,
+      cabins: undefined,
+      guests: undefined,
+      crew: undefined,
+      price_per_week: undefined,
+      price_per_day: undefined,
+      sale_price: undefined,
+      currency: "EUR",
+      region: "",
+      country: "",
+      port: cityName,
+      features: [],
+      description: `${name} available for charter in ${cityName} via Click&Boat.`,
+      source_url: entry.url,
+      source_title: `Click&Boat — ${name}`,
+      luxury_level: 3,
+      match_score: 0.8,
+      match_reasons: ["Direct listing", "Click&Boat", "Verified detail URL"],
+      ai_summary: `${name} — ${stdType} charter in ${cityName} via Click&Boat.`,
+      image_url: entry.images[0] || undefined,
+    });
+  }
+
+  return allBoats;
+}
+
+/** Bulk scrape Samboat */
+export async function bulkScrapeSamboat(
+  maxEntries = 300,
+  onProgress?: ProgressCallback
+): Promise<ExtractedListing[]> {
+  const boats = await scrapeSamboat(maxEntries);
+  onProgress?.({
+    platform: "samboat.de",
+    destination: "all",
+    boatsFound: boats.length,
+    totalSoFar: boats.length,
+    done: true,
+  });
+  return boats;
+}
+
+/** Bulk scrape Click&Boat */
+export async function bulkScrapeClickAndBoat(
+  maxEntries = 300,
+  onProgress?: ProgressCallback
+): Promise<ExtractedListing[]> {
+  const boats = await scrapeClickAndBoat(maxEntries);
+  onProgress?.({
+    platform: "clickandboat.com",
+    destination: "all",
+    boatsFound: boats.length,
+    totalSoFar: boats.length,
+    done: true,
+  });
+  return boats;
+}
+
 /** Available destinations/types for each platform */
 export const MASTER_YACHTING_DESTINATIONS = Object.keys(MY_DESTINATIONS);
 export const BOATAROUND_BOAT_TYPES = ["sailing", "motor", "catamaran"];

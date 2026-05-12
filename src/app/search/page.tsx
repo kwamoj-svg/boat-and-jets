@@ -20,7 +20,9 @@ import {
   Anchor,
   UserCheck,
   Search,
+  Bot,
 } from "lucide-react";
+import { Footer } from "@/components/Footer";
 import type { ExtractedListing } from "@/lib/claude-ai";
 
 interface ParsedQuery {
@@ -653,7 +655,21 @@ function SearchContent() {
             Keine Ergebnisse gefunden. Versuche eine andere Suche.
           </div>
         )}
+
+        {/* AI Transparency Notice — EU AI Act compliant */}
+        {hasResults && (
+          <div className="mt-10 mb-6 flex items-start gap-2.5 px-4 py-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-xs text-gray-500 leading-relaxed">
+            <Bot className="w-4 h-4 shrink-0 mt-0.5 text-gray-600" />
+            <p>
+              Empfehlungen werden durch KI erstellt und k&ouml;nnen Fehler enthalten.
+              Bitte pr&uuml;fe alle Angaben (Preise, Verf&uuml;gbarkeit, Ausstattung) beim jeweiligen Anbieter.
+              Externe Links k&ouml;nnen Affiliate-Links sein.
+            </p>
+          </div>
+        )}
       </div>
+
+      <Footer />
     </main>
   );
 }
