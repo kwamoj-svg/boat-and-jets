@@ -7,6 +7,7 @@ import {
 } from "@/lib/claude-ai";
 import type { ExtractedListing } from "@/lib/claude-ai";
 import { resolveLocation, marinasToSearchContext } from "@/lib/google-places";
+import { semanticRank } from "@/lib/embeddings";
 
 export const maxDuration = 45;
 
@@ -189,11 +190,16 @@ export async function GET(req: NextRequest) {
           }
         }
 
+        // Stage 5.5: Semantic re-ranking with OpenAI embeddings
+        const searchText = parsed.optimized_search_query || parsed.corrected_query || q;
+        const ranked = await semanticRank(searchText, allListings);
+        const rankedListings = ranked.length > 0 ? ranked : allListings;
+
         // Sort + diversify (max 3 per domain)
-        allListings.sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0));
+        rankedListings.sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0));
 
         const sourceCounts = new Map<string, number>();
-        const finalListings = allListings.filter((l) => {
+        const finalListings = rankedListings.filter((l) => {
           const domain = getDomain(l.source_url);
           const count = sourceCounts.get(domain) || 0;
           if (count >= 3) return false;
@@ -210,7 +216,7 @@ export async function GET(req: NextRequest) {
         }
 
         send("done", {
-          total_found: allListings.length,
+          total_found: rankedListings.length,
           displayed: finalListings.length,
           platforms_searched: platformCount,
           pages_analyzed: pagesWithContent.length,
