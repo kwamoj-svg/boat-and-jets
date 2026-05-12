@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Star, Users, Ruler, MapPin, Sparkles, ExternalLink, Anchor } from "lucide-react";
+import { Users, Ruler, MapPin, Sparkles, ExternalLink, Anchor } from "lucide-react";
 import { formatPrice } from "@/lib/format";
 import type { ExtractedListing } from "@/lib/claude-ai";
 
@@ -162,15 +162,12 @@ export function ListingCard({ listing, index }: { listing: ExtractedListing; ind
             ) : null}
           </div>
 
-          {/* Stars */}
-          {listing.luxury_level > 0 && (
-            <div className="flex items-center gap-0.5 mb-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Star
-                  key={i}
-                  className={`w-3.5 h-3.5 ${i < listing.luxury_level ? "text-gold fill-gold" : "text-gray-700"}`}
-                />
-              ))}
+          {/* Price per day (if available, show prominently) */}
+          {listing.price_per_day && (
+            <div className="mb-3">
+              <span className="text-sm font-medium text-gold">
+                ab {currency}{formatPrice(listing.price_per_day)}/Tag
+              </span>
             </div>
           )}
 

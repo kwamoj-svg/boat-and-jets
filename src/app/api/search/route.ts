@@ -16,6 +16,7 @@ import {
   findCachedBoats,
   bulkFindDetailUrls,
 } from "@/lib/database";
+import { upgradeAllUrls } from "@/lib/platform-urls";
 
 export const maxDuration = 45;
 
@@ -375,6 +376,16 @@ export async function GET(req: NextRequest) {
           sourceCounts.set(domain, count + 1);
           return true;
         }).slice(0, 50);
+
+        // Final URL upgrade: replace remaining category URLs with smart platform search URLs
+        upgradeAllUrls(finalListings, {
+          location: locationQuery,
+          country: parsed.country || undefined,
+          city: parsed.city || undefined,
+          guests: parsed.guests || undefined,
+          dateFrom: parsed.date || undefined,
+          boatType: parsed.boat_type || undefined,
+        });
 
         // Stream results
         const finalPlatforms = new Set(finalListings.map(l => getDomain(l.source_url))).size;
