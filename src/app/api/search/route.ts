@@ -84,12 +84,12 @@ export async function GET(req: NextRequest) {
           message: `Found ${uniqueResults.length + platformListings.length} results from ${platformCount} platforms...`,
         });
 
-        // Diversify pages (max 2 per domain)
+        // Diversify pages (max 3 per domain)
         const domainCount = new Map<string, number>();
         const diverseResults = uniqueResults.filter((r) => {
           const domain = getDomain(r.link);
           const count = domainCount.get(domain) || 0;
-          if (count >= 2) return false;
+          if (count >= 3) return false;
           domainCount.set(domain, count + 1);
           return true;
         });

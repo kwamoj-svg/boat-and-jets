@@ -43,7 +43,7 @@ const PLATFORMS = [
   // Caribbean
   "caribbeanyachtcharter.com", "nicholsonyachts.com",
   // DACH
-  "scansail.de", "master-yachting.de", "argos-yachtcharter.de", "yachtico.com",
+  "scansail.de", "master-yachting.de", "argos-yachtcharter.de", "yachtico.com", "boataround.com",
   // Sale
   "yachtworld.com", "boats.com", "boattrader.com", "rightboat.com", "theyachtmarket.com",
   // French

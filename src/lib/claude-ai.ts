@@ -139,15 +139,14 @@ Search: "${search}" | Location: ${loc} | Budget: ${budget} | Type: ${parsedQuery
 
 ${pagesText}
 
-CRITICAL — QUALITY FILTER:
-- ONLY extract boats you can actually ${parsedQuery.intent === "buy" ? "BUY" : "RENT/CHARTER privately"}
-- REJECT: tour boats, ferries, passenger ships, sailing schools, boat tours, harbor cruises, excursion boats, sightseeing boats, water taxis
-- REJECT boats without a bookable charter price or sale price
-- A real charter listing has: a specific boat name, a rental/charter price, and availability for private booking
-- match_score: 0.9+ = perfect match (right location, type, budget), 0.7-0.89 = good match, 0.5-0.69 = partial match. Be honest.
+QUALITY FILTER:
+- REJECT: ferries, passenger ships, sailing schools, harbor cruises, sightseeing boats, water taxis
+- INCLUDE: any boat/yacht you can rent, charter, or book privately — even if price is missing
+- If a page lists multiple boats (e.g. a fleet page), extract EACH individual boat separately
+- match_score: 0.85+ = perfect match, 0.7-0.84 = good, 0.5-0.69 = partial
 
 RULES:
-1. Max 15 boats. Quality over quantity — skip irrelevant ones.
+1. Extract AS MANY boats as possible. Max 20. The more the better.
 2. source_url: Use DIRECT boat detail URL from [BOAT LINKS: ...]. NEVER use homepage/category URLs.
 3. image_url: Match from [IMAGES: ...] to each boat.
 4. Diversify across pages. Be exact with prices (per day/week/sale).
@@ -184,16 +183,16 @@ export async function extractListingsFromSearchResults(
     messages: [
       {
         role: "user",
-        content: `Extract boats available for ${parsedQuery.intent === "buy" ? "PURCHASE" : "PRIVATE CHARTER/RENTAL"} from search snippets.
+        content: `Extract boats for ${parsedQuery.intent === "buy" ? "PURCHASE" : "CHARTER/RENTAL"} from search snippets.
 Search: "${search}" | Location: ${parsedQuery.country || parsedQuery.region || "any"}
 
 ${resultsText}
 
 Rules:
-- ONLY real ${parsedQuery.intent === "buy" ? "sale" : "charter/rental"} listings with a specific boat name or model
-- REJECT: tours, excursions, sailing schools, ferries, harbor cruises, sightseeing
-- source_url = search result URL. Diversify across domains. Max 8.
-- match_score: be honest (0.5-0.9 based on how well it matches the search)
+- Extract any boat/yacht available for ${parsedQuery.intent === "buy" ? "sale" : "charter or rental"}
+- REJECT only: tours, sailing schools, ferries, sightseeing
+- If a snippet mentions a platform with boats (e.g. "20+ boats available"), create a listing for that platform
+- source_url = search result URL. Diversify across domains. Max 12.
 
 JSON array only:
 [{"name":"","type":"","brand":null,"model":null,"year":null,"length_ft":null,"cabins":null,"guests":null,"crew":null,"price_per_week":null,"price_per_day":null,"sale_price":null,"currency":"EUR","region":"","country":"","port":null,"features":[],"description":"","source_url":"","source_title":"","image_url":null,"luxury_level":3,"match_score":0.65,"match_reasons":[],"ai_summary":""}]`,

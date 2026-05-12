@@ -206,6 +206,74 @@ export async function scrapeGetMyBoat(location: string, boatType?: string): Prom
   return { listings: listings.slice(0, 8), platform: "getmyboat.com" };
 }
 
+export async function scrapeBoataround(location: string, boatType?: string): Promise<ScraperResult> {
+  const loc = encodeURIComponent(location.toLowerCase().replace(/\s+/g, "-"));
+  const url = `https://www.boataround.com/en/yacht-charter/${loc}`;
+
+  const html = await fetchWithTimeout(url);
+  if (!html) return { listings: [], platform: "boataround.com" };
+
+  const listings: ExtractedListing[] = [];
+  const jsonLd = extractJsonLd(html);
+
+  for (const item of jsonLd) {
+    const name = String(item.name || "");
+    if (!name || name.length < 3) continue;
+    listings.push({
+      name,
+      type: boatType || "sailing",
+      description: String(item.description || "").slice(0, 200),
+      source_url: String(item.url || url),
+      source_title: `Boataround - ${name}`,
+      currency: "EUR",
+      region: location,
+      country: location,
+      features: [],
+      luxury_level: 3,
+      match_score: 0.75,
+      match_reasons: ["Direct platform listing", "Boataround"],
+      ai_summary: String(item.description || "").slice(0, 150),
+      image_url: String(item.image || ""),
+    } as ExtractedListing);
+  }
+
+  return { listings: listings.slice(0, 8), platform: "boataround.com" };
+}
+
+export async function scrapeZizoo(location: string, boatType?: string): Promise<ScraperResult> {
+  const loc = encodeURIComponent(location.toLowerCase().replace(/\s+/g, "-"));
+  const url = `https://www.zizoo.com/en/search/${loc}`;
+
+  const html = await fetchWithTimeout(url);
+  if (!html) return { listings: [], platform: "zizoo.com" };
+
+  const listings: ExtractedListing[] = [];
+  const jsonLd = extractJsonLd(html);
+
+  for (const item of jsonLd) {
+    const name = String(item.name || "");
+    if (!name || name.length < 3) continue;
+    listings.push({
+      name,
+      type: boatType || "sailing",
+      description: String(item.description || "").slice(0, 200),
+      source_url: String(item.url || url),
+      source_title: `Zizoo - ${name}`,
+      currency: "EUR",
+      region: location,
+      country: location,
+      features: [],
+      luxury_level: 3,
+      match_score: 0.75,
+      match_reasons: ["Direct platform listing", "Zizoo"],
+      ai_summary: String(item.description || "").slice(0, 150),
+      image_url: String(item.image || ""),
+    } as ExtractedListing);
+  }
+
+  return { listings: listings.slice(0, 8), platform: "zizoo.com" };
+}
+
 export async function scrapeAllPlatforms(
   location: string,
   boatType?: string
@@ -217,6 +285,8 @@ export async function scrapeAllPlatforms(
     scrapeSamboat(location, boatType),
     scrapeNautal(location, boatType),
     scrapeGetMyBoat(location, boatType),
+    scrapeBoataround(location, boatType),
+    scrapeZizoo(location, boatType),
   ]);
 
   const allListings: ExtractedListing[] = [];
