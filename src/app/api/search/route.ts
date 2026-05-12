@@ -343,17 +343,33 @@ export async function GET(req: NextRequest) {
             }
           }
 
-          // 5) Budget enforcement — hard filter
-          if (parsed.budget_per_day && l.price_per_day) {
-            if (l.price_per_day > parsed.budget_per_day * 1.3) {
-              allListings.splice(i, 1);
-              continue;
+          // 5) Budget enforcement — hard filter + demote unknown prices
+          if (parsed.budget_per_day) {
+            if (l.price_per_day) {
+              if (l.price_per_day > parsed.budget_per_day * 1.3) {
+                allListings.splice(i, 1);
+                continue;
+              }
+              // Boost boats clearly within budget
+              if (l.price_per_day <= parsed.budget_per_day) {
+                l.match_score = Math.max(l.match_score, 0.85);
+              }
+            } else {
+              // No price known — demote (budget was specified but we can't verify)
+              l.match_score = Math.min(l.match_score, 0.55);
             }
           }
-          if (parsed.budget_max && l.price_per_week) {
-            if (l.price_per_week > parsed.budget_max * 1.3) {
-              allListings.splice(i, 1);
-              continue;
+          if (parsed.budget_max) {
+            if (l.price_per_week) {
+              if (l.price_per_week > parsed.budget_max * 1.3) {
+                allListings.splice(i, 1);
+                continue;
+              }
+              if (l.price_per_week <= parsed.budget_max) {
+                l.match_score = Math.max(l.match_score, 0.85);
+              }
+            } else if (!l.price_per_day) {
+              l.match_score = Math.min(l.match_score, 0.55);
             }
           }
         }

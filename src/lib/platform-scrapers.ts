@@ -695,9 +695,9 @@ async function scrapeClickAndBoatSitemap(location: string, boatType?: string): P
       const imgMatch = block.match(/<image:loc>(https:\/\/[^<]+)<\/image:loc>/);
       const imageUrl = imgMatch ? imgMatch[1] : undefined;
 
-      const cleanSlug = nameSlug.replace(/-[a-z0-9]{4,6}$/, "");
+      const cleanSlug = decodeURIComponent(nameSlug).replace(/-[a-z0-9]{4,6}$/, "");
       const name = cleanSlug.split("-").map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
-      const cityName = city.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const cityName = decodeURIComponent(city).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
       const type = typeSlug.includes("segel") ? "sailing" : typeSlug.includes("katamaran") ? "catamaran" : typeSlug.includes("schlauchboot") ? "speedboat" : "motor";
       const parts = cleanSlug.split("-");
       const brand = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : undefined;
@@ -731,6 +731,41 @@ async function scrapeClickAndBoatSitemap(location: string, boatType?: string): P
       } as ExtractedListing);
     }
   }
+
+  // Enrich first 15 with prices from detail pages (parallel, fast)
+  const enrichBatch = listings.slice(0, 15);
+  await Promise.allSettled(
+    enrichBatch.map(async (b) => {
+      try {
+        const html = await fetchWithTimeout(b.source_url, 4000);
+        if (!html) return;
+        // Try og:title for better name
+        const ogTitle = html.match(/og:title['"]\s*content=['"](.*?)['"]/);
+        if (ogTitle) {
+          let title = ogTitle[1]
+            .replace(/\s*[-|–]\s*Click.*$/i, "")
+            .replace(/Boot mieten\s*/i, "")
+            .replace(/Bootsverleih\s*/i, "")
+            .replace(/&#0?39;/g, "'").replace(/&amp;/g, "&").trim();
+          if (title.length > 3) b.name = title;
+        }
+        // Try og:image
+        const ogImg = html.match(/og:image['"]\s*content=['"](https?:\/\/[^'"]+)['"]/);
+        if (ogImg && !b.image_url) b.image_url = ogImg[1];
+        // Try to find price (€XXX pattern)
+        const priceMatch = html.match(/(?:price|preis|ab|from)\s*[:\s]*(\d[\d.,]*)\s*€/i)
+          || html.match(/(\d[\d.,]*)\s*€\s*\/\s*(?:Tag|jour|day)/i)
+          || html.match(/"price"\s*:\s*"?(\d[\d.,]*)"?/);
+        if (priceMatch) {
+          const price = Number(priceMatch[1].replace(/\./g, "").replace(",", "."));
+          if (price > 0 && price < 50000) {
+            b.price_per_day = price;
+            b.price_per_week = price * 7;
+          }
+        }
+      } catch { /* ignore */ }
+    })
+  );
 
   return { listings, platform: "clickandboat.com" };
 }
@@ -788,8 +823,8 @@ async function scrapeSamboatSitemap(location: string, boatType?: string): Promis
     const stdType = sbTypeToStandard(typeSlug);
     if (boatType && stdType !== boatType && !typeSlug.includes(boatType)) continue;
 
-    const cityName = city.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const typeName = typeSlug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const cityName = decodeURIComponent(city).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const typeName = decodeURIComponent(typeSlug).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
     listings.push({
       name: `${typeName} ${cityName} #${id}`,
