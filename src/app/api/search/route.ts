@@ -18,7 +18,7 @@ import {
 } from "@/lib/database";
 import { upgradeAllUrls } from "@/lib/platform-urls";
 
-export const maxDuration = 45;
+export const maxDuration = 60;
 
 // DSGVO: Kein persistentes Logging von Nutzerdaten.
 // Suchanfragen werden session-basiert verarbeitet und nur anonymisiert
@@ -432,17 +432,17 @@ export async function GET(req: NextRequest) {
         const ranked = await semanticRank(searchText, allListings);
         const rankedListings = ranked.length > 0 ? ranked : allListings;
 
-        // Sort + diversify (max 8 per domain)
+        // Sort + diversify (max 25 per domain to allow 100+ results)
         rankedListings.sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0));
 
         const sourceCounts = new Map<string, number>();
         const finalListings = rankedListings.filter((l) => {
           const domain = getDomain(l.source_url);
           const count = sourceCounts.get(domain) || 0;
-          if (count >= 8) return false;
+          if (count >= 25) return false;
           sourceCounts.set(domain, count + 1);
           return true;
-        }).slice(0, 50);
+        }).slice(0, 120);
 
         // Final URL upgrade: replace remaining category URLs with smart platform search URLs
         upgradeAllUrls(finalListings, {
