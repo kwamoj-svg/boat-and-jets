@@ -1,6 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+let _client: Anthropic | null = null;
+function getClient(): Anthropic {
+  if (!_client) {
+    const key = process.env.BOAT_ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY;
+    if (!key) throw new Error("BOAT_ANTHROPIC_KEY is not set");
+    _client = new Anthropic({ apiKey: key });
+  }
+  return _client;
+}
 
 export interface ParsedUserQuery {
   intent: "charter" | "buy" | "explore";
@@ -14,6 +22,7 @@ export interface ParsedUserQuery {
   style?: string;
   keywords: string[];
   raw: string;
+  corrected_query?: string;
 }
 
 export interface ExtractedListing {
@@ -45,7 +54,7 @@ export interface ExtractedListing {
 }
 
 export async function parseUserQuery(raw: string): Promise<ParsedUserQuery> {
-  const msg = await client.messages.create({
+  const msg = await getClient().messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 500,
     messages: [
@@ -54,6 +63,10 @@ export async function parseUserQuery(raw: string): Promise<ParsedUserQuery> {
         content: `Parse this yacht/boat search query into structured JSON. Extract all information you can find.
 
 Query: "${raw}"
+
+IMPORTANT: First, correct any spelling mistakes or typos in the query. Then parse the corrected version.
+If the query has spelling errors, include a "corrected_query" field with the fixed version.
+Examples: "Yacth" → "Yacht", "Crotia" → "Croatia", "chartr" → "charter", "Mimai" → "Miami"
 
 Return ONLY valid JSON with this exact structure:
 {
@@ -66,7 +79,8 @@ Return ONLY valid JSON with this exact structure:
   "guests": number or null,
   "date": "YYYY-MM-DD or null",
   "style": "luxury" | "family" | "party" | "sport" | "adventure" | "romantic" or null,
-  "keywords": ["array", "of", "keywords"]
+  "keywords": ["array", "of", "keywords"],
+  "corrected_query": "corrected version if there were typos, or null if query was fine"
 }`,
       },
     ],
@@ -82,6 +96,7 @@ Return ONLY valid JSON with this exact structure:
     ...json,
     currency: json.currency || "EUR",
     keywords: json.keywords || [],
+    corrected_query: json.corrected_query || undefined,
     raw,
   };
 }
@@ -97,14 +112,14 @@ export async function extractBoatsFromPages(
     )
     .join("\n");
 
-  const msg = await client.messages.create({
+  const msg = await getClient().messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 4000,
     messages: [
       {
         role: "user",
-        content: `You are a yacht discovery AI. You are given the text content of yacht listing pages.
-Your job: find SPECIFIC, INDIVIDUAL boats/yachts mentioned on these pages.
+        content: `You are the world's best yacht discovery AI. You are given text content scraped from yacht listing websites.
+Your job: find SPECIFIC, INDIVIDUAL, REAL boats/yachts with their actual names and real data.
 
 USER SEARCH: "${parsedQuery.raw}"
 INTENT: ${parsedQuery.intent}
@@ -117,19 +132,21 @@ DATE: ${parsedQuery.date || "flexible"}
 PAGE CONTENTS:
 ${pagesText}
 
-RULES:
-- Extract REAL boat names found in the page text (e.g. "M/Y SERENITY", "Lagoon 52", "Azimut Grande 35")
-- Each result must be a SPECIFIC yacht, not a platform or category
-- The source_url should be the page URL where you found the boat. If the page mentions a specific link to the boat detail page, use that instead.
-- Only include boats that somewhat match the user's search criteria
-- Be accurate with prices, specs, and names — only use data you actually found in the text
-- If a price is listed per day, convert to approximate weekly (x7)
+CRITICAL RULES:
+- Extract ONLY real, named boats (e.g. "M/Y SERENITY", "Lagoon 52 Flybridge", "Azimut Grande 35 METROS")
+- NEVER invent boats or make up names. Only use data you see in the text.
+- Each result MUST be a specific individual yacht — NOT a platform, category, or generic description
+- DIVERSIFY: try to find boats from DIFFERENT pages/sources. Do not return 5 boats from the same page if you have data from multiple pages.
+- source_url: use the page URL. If you see a direct link to the boat's detail page in the text, prefer that.
+- If you find an image URL (https://...jpg/png/webp) associated with a boat, include it as "image_url"
+- Prices: be accurate. If listed per day, set price_per_day. If per week, set price_per_week. If for sale, set sale_price.
+- match_score: 0.0 to 1.0 based on how well it matches the user's criteria (budget, location, type, guests)
 
-Return ONLY a valid JSON array (max 8 boats):
+Return ONLY a valid JSON array (max 10 boats):
 [{
   "name": "actual yacht name from page",
   "type": "motor|sailing|catamaran|superyacht|speedboat|gulet",
-  "brand": "builder if mentioned",
+  "brand": "builder/brand if mentioned",
   "model": "model if mentioned",
   "year": 2024,
   "length_ft": 85,
@@ -137,21 +154,25 @@ Return ONLY a valid JSON array (max 8 boats):
   "guests": 10,
   "crew": 3,
   "price_per_week": 50000,
+  "price_per_day": null,
+  "sale_price": null,
   "currency": "EUR",
   "region": "Mediterranean",
-  "country": "USA",
-  "port": "Miami",
-  "features": ["Jacuzzi", "Jet ski"],
+  "country": "Croatia",
+  "port": "Split",
+  "features": ["Jacuzzi", "Jet ski", "Flybridge"],
   "description": "Brief factual description from the page",
-  "source_url": "URL where this specific boat was found",
+  "source_url": "URL where found",
   "source_title": "page title",
+  "image_url": "direct image URL if found, or null",
   "luxury_level": 4,
   "match_score": 0.85,
-  "match_reasons": ["Budget match", "Location match"],
-  "ai_summary": "Why this specific boat matches the user's request"
+  "match_reasons": ["Budget match", "Location match", "Right size"],
+  "ai_summary": "One sentence: why this boat matches this specific search"
 }]
 
-If you cannot find any specific boats, return an empty array [].`,
+If no specific boats found, return [].
+IMPORTANT: Return boats from AS MANY DIFFERENT sources as possible.`,
       },
     ],
   });
@@ -181,14 +202,14 @@ export async function extractListingsFromSearchResults(
     )
     .join("\n\n");
 
-  const msg = await client.messages.create({
+  const msg = await getClient().messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 4000,
     messages: [
       {
         role: "user",
-        content: `You are a yacht discovery AI. Analyze these search results and extract specific yacht listings.
-Focus on finding INDIVIDUAL, NAMED yachts — not platforms or generic categories.
+        content: `You are a yacht discovery AI. Analyze these Google search result snippets to find specific, real yacht listings.
+Only extract INDIVIDUAL, NAMED yachts — never platforms, categories, or articles.
 
 USER SEARCH: "${parsedQuery.raw}"
 INTENT: ${parsedQuery.intent}
@@ -200,31 +221,35 @@ GUESTS: ${parsedQuery.guests || "not specified"}
 SEARCH RESULTS:
 ${resultsText}
 
-Extract up to 4 specific yacht listings visible in these snippets.
+Extract up to 6 specific yacht listings from DIFFERENT sources/URLs.
+Only include boats where the snippet clearly mentions a specific vessel name or model.
 Return ONLY a valid JSON array:
 [{
-  "name": "specific yacht name",
+  "name": "specific yacht name from snippet",
   "type": "motor|sailing|catamaran|superyacht|speedboat|gulet",
   "brand": "builder or null",
   "model": "model or null",
-  "year": 2024,
-  "length_ft": 85,
-  "cabins": 4,
-  "guests": 10,
-  "crew": 3,
-  "price_per_week": 50000,
+  "year": null,
+  "length_ft": null,
+  "cabins": null,
+  "guests": null,
+  "crew": null,
+  "price_per_week": null,
+  "price_per_day": null,
+  "sale_price": null,
   "currency": "EUR",
   "region": "region",
   "country": "country",
-  "port": "port",
+  "port": "port or null",
   "features": [],
-  "description": "brief description",
-  "source_url": "URL from search results",
-  "source_title": "title",
-  "luxury_level": 4,
-  "match_score": 0.75,
+  "description": "brief description from snippet",
+  "source_url": "the search result URL",
+  "source_title": "search result title",
+  "image_url": null,
+  "luxury_level": 3,
+  "match_score": 0.70,
   "match_reasons": ["reason"],
-  "ai_summary": "why this matches"
+  "ai_summary": "why this matches the search"
 }]`,
       },
     ],

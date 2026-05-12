@@ -128,6 +128,38 @@ export function buildSearchQueries(parsed: {
   return queries.filter((q) => q.length > 10).slice(0, 10);
 }
 
+export interface SerperImageResult {
+  title: string;
+  imageUrl: string;
+  link: string;
+}
+
+export async function searchImages(query: string, num = 10): Promise<SerperImageResult[]> {
+  try {
+    const res = await fetch("https://google.serper.dev/images", {
+      method: "POST",
+      headers: {
+        "X-API-KEY": process.env.SERPER_API_KEY!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ q: query, num }),
+    });
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    return (data.images ?? []).map(
+      (r: { title: string; imageUrl: string; link: string }) => ({
+        title: r.title,
+        imageUrl: r.imageUrl,
+        link: r.link,
+      })
+    );
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchPageContent(url: string): Promise<string> {
   try {
     const controller = new AbortController();
