@@ -5,17 +5,40 @@ interface ScraperResult {
   platform: string;
 }
 
-const HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
-  Accept: "text/html,application/xhtml+xml",
-  "Accept-Language": "en-US,en;q=0.9,de;q=0.8",
-};
+// Rotate User-Agents to avoid bot detection on Render servers
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.5; rv:128.0) Gecko/20100101 Firefox/128.0",
+];
 
-async function fetchWithTimeout(url: string, ms = 5000, extraHeaders?: Record<string, string>): Promise<string> {
+function getHeaders(): Record<string, string> {
+  return {
+    "User-Agent": USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)],
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+  };
+}
+
+async function fetchWithTimeout(url: string, ms = 8000, extraHeaders?: Record<string, string>): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ms);
   try {
-    const res = await fetch(url, { signal: controller.signal, headers: { ...HEADERS, ...extraHeaders } });
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { ...getHeaders(), ...extraHeaders },
+      redirect: "follow",
+    });
     clearTimeout(timeout);
     if (!res.ok) return "";
     return await res.text();
@@ -532,7 +555,7 @@ export async function scrapeMasterYachting(location: string, boatType?: string):
   // Fetch 3 pages in parallel for more results (~20 boats per page = ~60 total)
   const pageUrls = [1, 2, 3].map(p => `https://www.master-yachting.de/de/boat-rental/${slug}/?page=${p}`);
   const pageResults = await Promise.allSettled(
-    pageUrls.map(url => fetchWithTimeout(url, 6000, { "HX-Request": "true" }))
+    pageUrls.map(url => fetchWithTimeout(url, 12000, { "HX-Request": "true" }))
   );
 
   const allBoatData: { name: string; price: number; loc: string; cat: string; id: number }[] = [];
@@ -641,8 +664,8 @@ async function scrapeClickAndBoatSitemap(location: string, boatType?: string): P
 
   // Fetch BOTH German product sitemaps in parallel (50,000+ entries total)
   const [xml0, xml1] = await Promise.allSettled([
-    fetchWithTimeout("https://www.clickandboat.com/sitemaps/1707/CAB/products-de_0.xml", 10000),
-    fetchWithTimeout("https://www.clickandboat.com/sitemaps/1707/CAB/products-de_1.xml", 10000),
+    fetchWithTimeout("https://www.clickandboat.com/sitemaps/1707/CAB/products-de_0.xml", 20000),
+    fetchWithTimeout("https://www.clickandboat.com/sitemaps/1707/CAB/products-de_1.xml", 20000),
   ]);
 
   const xmlTexts: string[] = [];
@@ -747,7 +770,7 @@ function sbTypeToStandard(t: string): string {
 
 async function scrapeSamboatSitemap(location: string, boatType?: string): Promise<ScraperResult> {
   const locLower = location.toLowerCase().replace(/\s+/g, "-");
-  const xml = await fetchWithTimeout("https://www.samboat.de/sitemap_de_product_listings.xml", 12000);
+  const xml = await fetchWithTimeout("https://www.samboat.de/sitemap_de_product_listings.xml", 20000);
   if (!xml) return { listings: [], platform: "samboat.de" };
 
   const listings: ExtractedListing[] = [];
@@ -840,18 +863,32 @@ export async function scrapeAllPlatforms(
 
   const allListings: ExtractedListing[] = [];
   const seenNames = new Set<string>();
+  const scraperNames = [
+    "master-yachting", "clickandboat-sitemap", "samboat-sitemap",
+    "clickandboat", "samboat", "nautal", "getmyboat", "boataround", "zizoo",
+  ];
 
-  for (const result of results) {
-    if (result.status === "fulfilled" && result.value.listings.length > 0) {
-      for (const listing of result.value.listings) {
-        // Dedupe by name across scrapers
-        const key = (listing.name || "").toLowerCase().trim();
-        if (key.length < 3 || seenNames.has(key)) continue;
-        seenNames.add(key);
-        allListings.push(listing);
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    const name = scraperNames[i] || `scraper-${i}`;
+    if (result.status === "fulfilled") {
+      const count = result.value.listings.length;
+      if (count > 0) {
+        console.log(`[SCRAPER] ${name}: ${count} boats`);
+        for (const listing of result.value.listings) {
+          const key = (listing.name || "").toLowerCase().trim();
+          if (key.length < 3 || seenNames.has(key)) continue;
+          seenNames.add(key);
+          allListings.push(listing);
+        }
+      } else {
+        console.log(`[SCRAPER] ${name}: 0 boats`);
       }
+    } else {
+      console.error(`[SCRAPER] ${name} FAILED:`, result.reason?.message || result.reason);
     }
   }
 
+  console.log(`[SCRAPER] Total: ${allListings.length} unique boats from ${location}`);
   return allListings;
 }
