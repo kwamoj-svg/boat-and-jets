@@ -19,7 +19,11 @@ const destinations = [
   { name: "Sydney", top: "68%", left: "82%" },
 ];
 
-export function GlobeAnimation() {
+interface GlobeProps {
+  highlightDestination?: string | null;
+}
+
+export function GlobeAnimation({ highlightDestination }: GlobeProps = {}) {
   return (
     <>
       <style>{`
@@ -152,6 +156,63 @@ export function GlobeAnimation() {
         .dest-dot:nth-child(7n) { animation-delay: -0.8s; }
         .dest-dot:nth-child(7n)::after { animation-delay: -0.8s; }
 
+        /* Highlighted destination dot */
+        .dest-dot-highlight {
+          position: absolute;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: rgba(200, 165, 90, 1);
+          box-shadow: 0 0 16px rgba(200, 165, 90, 0.8), 0 0 32px rgba(200, 165, 90, 0.4), 0 0 48px rgba(200, 165, 90, 0.2);
+          animation: highlightPulse 1.5s ease-in-out infinite;
+          z-index: 10;
+          transform: translate(-2px, -2px);
+        }
+        .dest-dot-highlight::after {
+          content: '';
+          position: absolute;
+          top: -8px;
+          left: -8px;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          border: 2px solid rgba(200, 165, 90, 0.5);
+          animation: highlightRing 1.5s ease-in-out infinite;
+        }
+        .dest-dot-highlight::before {
+          content: attr(data-label);
+          position: absolute;
+          bottom: 16px;
+          left: 50%;
+          transform: translateX(-50%);
+          white-space: nowrap;
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.05em;
+          color: rgba(200, 165, 90, 0.9);
+          text-shadow: 0 0 8px rgba(200, 165, 90, 0.4);
+          pointer-events: none;
+        }
+
+        @keyframes highlightPulse {
+          0%, 100% { opacity: 0.8; transform: translate(-2px, -2px) scale(1); }
+          50% { opacity: 1; transform: translate(-2px, -2px) scale(1.6); }
+        }
+        @keyframes highlightRing {
+          0%, 100% { opacity: 0.5; transform: scale(1); }
+          50% { opacity: 0; transform: scale(2.5); }
+        }
+
+        /* Dim other dots when one is highlighted */
+        .globe-sphere.has-highlight .dest-dot {
+          opacity: 0.2 !important;
+          animation: none !important;
+        }
+        .globe-sphere.has-highlight .dest-dot::after {
+          animation: none !important;
+          opacity: 0 !important;
+        }
+
         /* Ambient glow behind globe */
         .globe-glow {
           position: absolute;
@@ -165,6 +226,22 @@ export function GlobeAnimation() {
             transparent 70%
           );
           pointer-events: none;
+        }
+
+        /* Brighter glow when destination highlighted */
+        .globe-glow-highlight {
+          position: absolute;
+          width: 380px;
+          height: 380px;
+          border-radius: 50%;
+          background: radial-gradient(
+            circle,
+            rgba(200, 165, 90, 0.08) 0%,
+            rgba(200, 165, 90, 0.04) 40%,
+            transparent 70%
+          );
+          pointer-events: none;
+          transition: opacity 0.5s ease;
         }
 
         @keyframes globeRotate {
@@ -188,8 +265,14 @@ export function GlobeAnimation() {
         aria-hidden="true"
         style={{ pointerEvents: "none" }}
       >
-        <div className="globe-glow" />
-        <div className="globe-sphere" style={{ perspective: "800px" }}>
+        <div className={highlightDestination ? "globe-glow-highlight" : "globe-glow"} />
+        <div
+          className={`globe-sphere ${highlightDestination ? "has-highlight" : ""}`}
+          style={{
+            perspective: "800px",
+            animation: highlightDestination ? "none" : "globeRotate 20s linear infinite",
+          }}
+        >
           {/* Outer ring */}
           <div className="globe-outline" />
 
@@ -208,14 +291,24 @@ export function GlobeAnimation() {
           <div className="latitude latitude-4" />
 
           {/* Destination dots */}
-          {destinations.map((dest) => (
-            <div
-              key={dest.name}
-              className="dest-dot"
-              title={dest.name}
-              style={{ top: dest.top, left: dest.left }}
-            />
-          ))}
+          {destinations.map((dest) => {
+            const isHighlighted = highlightDestination === dest.name;
+            return isHighlighted ? (
+              <div
+                key={dest.name}
+                className="dest-dot-highlight"
+                data-label={dest.name}
+                style={{ top: dest.top, left: dest.left }}
+              />
+            ) : (
+              <div
+                key={dest.name}
+                className="dest-dot"
+                title={dest.name}
+                style={{ top: dest.top, left: dest.left }}
+              />
+            );
+          })}
         </div>
       </div>
     </>
