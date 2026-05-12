@@ -124,11 +124,25 @@ export async function GET(req: NextRequest) {
           });
         }
 
-        // Dedupe by URL
+        // Blocked domains — never fetch these for boat data
+        const BLOCKED_SEARCH_DOMAINS = new Set([
+          "youtube.com", "youtu.be", "facebook.com", "instagram.com",
+          "twitter.com", "x.com", "tiktok.com", "pinterest.com",
+          "reddit.com", "wikipedia.org", "wikivoyage.org",
+          "tripadvisor.com", "tripadvisor.de", "trustpilot.com",
+          "visaeurope.com", "visa.com", "booking.com", "airbnb.com",
+          "expedia.com", "kayak.com", "skyscanner.com",
+          "linkedin.com", "medium.com", "blogspot.com",
+          "amazon.com", "ebay.com", "google.com",
+        ]);
+
+        // Dedupe by URL + filter out non-charter domains
         const seen = new Set<string>();
         const uniqueResults = allResults.flat().filter((r) => {
           if (seen.has(r.link)) return false;
           seen.add(r.link);
+          const domain = getDomain(r.link);
+          if (BLOCKED_SEARCH_DOMAINS.has(domain)) return false;
           return true;
         });
 
@@ -235,12 +249,12 @@ export async function GET(req: NextRequest) {
 
         // ── HARD POST-PROCESSING FILTERS ──
         // These run AFTER AI extraction to guarantee clean results.
-        // AI prompts help but can't be trusted 100%.
 
         const BANNED_NAME_WORDS = [
           "fleet", "platform", "collection", "multiple", "various",
           "diverse", "selection", "listing", "listings", "overview",
-          "angebote", "flotte", "auswahl",
+          "angebote", "flotte", "auswahl", "best boat", "top 10",
+          "guide", "tipps", "how to", "review",
         ];
         const KNOWN_PLATFORMS = [
           "nautal", "samboat", "click-boat", "clickboat", "boataround",
@@ -251,10 +265,52 @@ export async function GET(req: NextRequest) {
           "globesailor", "incrediblue", "borrowaboat",
         ];
 
+        // Domains that should NEVER be a source for boat listings
+        const BANNED_DOMAINS = [
+          "youtube.com", "youtu.be", "facebook.com", "instagram.com",
+          "twitter.com", "x.com", "tiktok.com", "pinterest.com",
+          "reddit.com", "wikipedia.org", "wikivoyage.org",
+          "tripadvisor.com", "tripadvisor.de", "trustpilot.com",
+          "visaeurope.com", "visa.com", "booking.com", "airbnb.com",
+          "expedia.com", "kayak.com", "skyscanner.com",
+          "linkedin.com", "medium.com", "blogspot.com",
+          "amazon.com", "ebay.com", "google.com",
+        ];
+
+        // Boat type compatibility: which types match which search
+        const TYPE_COMPAT: Record<string, string[]> = {
+          motor: ["motor", "motorboot", "speedboat", "speed", "rib", "power", "trawler", "flybridge", "motor yacht", "motoryacht"],
+          sailing: ["sailing", "segel", "segelboot", "sail", "sailboat"],
+          catamaran: ["catamaran", "katamaran", "cat"],
+          houseboat: ["houseboat", "hausboot"],
+          gulet: ["gulet"],
+          superyacht: ["superyacht", "super yacht", "mega yacht", "megayacht"],
+        };
+
+        // Check if a listing's type matches the requested boat type
+        function typeMatches(listingType: string, requestedType: string): boolean {
+          if (!requestedType) return true;
+          const reqLower = requestedType.toLowerCase();
+          const listLower = listingType.toLowerCase();
+          // Direct match
+          if (listLower === reqLower) return true;
+          if (listLower.includes(reqLower) || reqLower.includes(listLower)) return true;
+          // Check compatibility groups
+          const compatTypes = TYPE_COMPAT[reqLower] || [reqLower];
+          return compatTypes.some(t => listLower.includes(t) || t.includes(listLower));
+        }
+
         // Filter in-place
         for (let i = allListings.length - 1; i >= 0; i--) {
           const l = allListings[i];
           const nameLower = (l.name || "").toLowerCase().trim();
+
+          // 0) Remove listings from banned domains (youtube, wikipedia, etc.)
+          const sourceDomain = getDomain(l.source_url);
+          if (BANNED_DOMAINS.some(d => sourceDomain.includes(d))) {
+            allListings.splice(i, 1);
+            continue;
+          }
 
           // 1) Remove fleet/platform/collection entries
           if (BANNED_NAME_WORDS.some(w => nameLower.includes(w))) {
@@ -267,7 +323,6 @@ export async function GET(req: NextRequest) {
             const cleaned = nameLower.replace(/[^a-z0-9\s]/g, "").trim();
             return cleaned === p || cleaned.startsWith(p + " ") ||
                    cleaned.endsWith(" " + p) ||
-                   // "Nautal Ibiza" or "Samboat Fleet" patterns
                    (cleaned.split(/\s+/).length <= 3 && cleaned.includes(p));
           })) {
             allListings.splice(i, 1);
@@ -280,9 +335,16 @@ export async function GET(req: NextRequest) {
             continue;
           }
 
-          // 4) Budget enforcement — hard filter
+          // 4) BOAT TYPE enforcement — if user asked for "motor", remove sailing boats
+          if (parsed.boat_type && l.type) {
+            if (!typeMatches(l.type, parsed.boat_type)) {
+              // Demote instead of removing (keep but lower score significantly)
+              l.match_score = Math.min(l.match_score, 0.3);
+            }
+          }
+
+          // 5) Budget enforcement — hard filter
           if (parsed.budget_per_day && l.price_per_day) {
-            // Allow 30% tolerance (€300 budget → allow up to €390)
             if (l.price_per_day > parsed.budget_per_day * 1.3) {
               allListings.splice(i, 1);
               continue;
