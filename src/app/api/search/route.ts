@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { searchWeb, buildSearchQueries, fetchPageContent, searchImages } from "@/lib/serper";
+import { searchWeb, buildSearchQueries, fetchPageContent, searchImages, extractDetailLinksFromHtml } from "@/lib/serper";
 import {
   parseUserQuery,
   extractBoatsFromPages,
@@ -94,12 +94,42 @@ export async function GET(req: NextRequest) {
           return true;
         });
 
-        // Stage 3: Fetch 20 pages in parallel (faster timeout)
+        // Stage 3: Fetch 20 pages — single fetch, extract content + detail links
         const topPages = diverseResults.slice(0, 20);
+        const detailLinksByDomain = new Map<string, string[]>();
+
         const pageContents = await Promise.all(
           topPages.map(async (r) => {
-            const content = await fetchPageContent(r.link);
-            return { url: r.link, title: r.title, content };
+            try {
+              // Single HTTP fetch
+              const ctrl = new AbortController();
+              const t = setTimeout(() => ctrl.abort(), 4500);
+              const res = await fetch(r.link, {
+                signal: ctrl.signal,
+                headers: {
+                  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+                  Accept: "text/html",
+                  "Accept-Language": "en-US,en;q=0.9,de;q=0.8",
+                },
+              });
+              clearTimeout(t);
+              if (!res.ok) return { url: r.link, title: r.title, content: "" };
+              const html = await res.text();
+
+              // Extract detail links for URL upgrader
+              const domain = getDomain(r.link);
+              const links = extractDetailLinksFromHtml(html, r.link);
+              if (links.length > 0) {
+                const existing = detailLinksByDomain.get(domain) || [];
+                detailLinksByDomain.set(domain, [...new Set([...existing, ...links])]);
+              }
+
+              // Process content (reuse raw HTML, no second fetch)
+              const content = await fetchPageContent(r.link, html);
+              return { url: r.link, title: r.title, content };
+            } catch {
+              return { url: r.link, title: r.title, content: "" };
+            }
           })
         );
 
@@ -190,18 +220,78 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // Normalize prices + penalize category URLs
+        // ── URL UPGRADER: Replace category URLs with real boat detail pages ──
         for (const l of allListings) {
+          // Normalize prices
           if (l.price_per_day && !l.price_per_week) {
             l.price_per_week = l.price_per_day * 7;
           }
-          // Penalize listings with obvious category/search page URLs
-          const path = new URL(l.source_url).pathname;
-          const isCategory = /^\/(en|de|fr|es|it)?\/?$/.test(path) ||
-            /\/(search|results|fleet|boats?-list|yacht-charter|boat-rental)\/?$/i.test(path) ||
-            path.split("/").filter(Boolean).length <= 1;
+
+          const domain = getDomain(l.source_url);
+          let path: string;
+          try { path = new URL(l.source_url).pathname; } catch { continue; }
+          const segments = path.split("/").filter(Boolean);
+
+          // Check if URL looks like a category/homepage
+          const isCategory =
+            /^\/(en|de|fr|es|it)?\/?$/.test(path) ||
+            /\/(search|results|fleet|boats?-list|yacht-charter|boat-rental|browse)\/?$/i.test(path) ||
+            segments.length <= 1 ||
+            // Generic category paths ending in location name
+            /\/(yacht-charter|boat-rental|charter|boats|search)\//i.test(path) && segments.length <= 3 && !/\d/.test(segments[segments.length - 1]);
+
           if (isCategory) {
-            l.match_score = Math.min(l.match_score, 0.5);
+            // Try to find a matching detail link from the same domain
+            const domainLinks = detailLinksByDomain.get(domain) || [];
+            if (domainLinks.length > 0) {
+              const nameParts = (l.name || "").toLowerCase()
+                .replace(/[^a-z0-9\s]/g, "")
+                .split(/\s+/)
+                .filter(w => w.length > 2);
+              const brandModel = `${l.brand || ""} ${l.model || ""}`.toLowerCase().trim();
+
+              // Strategy 1: Match boat name words in URL
+              let bestLink: string | null = null;
+              let bestScore = 0;
+              for (const link of domainLinks) {
+                const linkLower = link.toLowerCase();
+                let score = 0;
+                for (const part of nameParts) {
+                  if (linkLower.includes(part)) score++;
+                }
+                if (brandModel.length > 3 && linkLower.includes(brandModel.replace(/\s+/g, "-"))) {
+                  score += 3;
+                }
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestLink = link;
+                }
+              }
+
+              if (bestLink && bestScore >= 1) {
+                l.source_url = bestLink;
+              } else if (domainLinks.length > 0) {
+                // Strategy 2: Use first available detail link from same domain (better than category)
+                const unusedLink = domainLinks.find(link =>
+                  !allListings.some(other => other !== l && other.source_url === link)
+                );
+                if (unusedLink) {
+                  l.source_url = unusedLink;
+                }
+              }
+            }
+
+            // Re-check: if still category URL, penalize
+            try {
+              const newPath = new URL(l.source_url).pathname;
+              const stillCategory =
+                /^\/(en|de|fr|es|it)?\/?$/.test(newPath) ||
+                /\/(search|results|fleet|boats?-list|yacht-charter|boat-rental)\/?$/i.test(newPath) ||
+                newPath.split("/").filter(Boolean).length <= 1;
+              if (stillCategory) {
+                l.match_score = Math.min(l.match_score, 0.45);
+              }
+            } catch { /* keep */ }
           }
         }
 

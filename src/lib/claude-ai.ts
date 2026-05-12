@@ -149,7 +149,7 @@ CRITICAL URL RULES:
 1. source_url MUST be a URL for ONE SPECIFIC BOAT — a detail/product page with the boat name or ID in the URL path.
    GOOD examples: /boot/concordia-102-ac-joanne, /yacht/sunseeker-50, /en/boat/12345, /listing/bavaria-46
    BAD examples: /search, /results, /boats, /fleet, /yacht-charter/hamburg, /en/boat-rental/germany (these are CATEGORY pages!)
-2. Look in [BOAT LINKS: ...] for detail URLs. Pick the one matching each boat's name/model.
+2. Look in [BOAT DETAIL LINKS: ...] at the TOP of each page. Pick the URL matching each boat's name/model. These are the REAL booking pages.
 3. If no detail URL exists for a boat, use the best available URL but set match_score to 0.5.
 4. Extract AS MANY boats as possible. Max 25. The more the better.
 5. image_url: Match from [IMAGES: ...] to each boat.

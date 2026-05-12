@@ -146,24 +146,60 @@ export async function searchImages(query: string, num = 10): Promise<SerperImage
   }
 }
 
-export async function fetchPageContent(url: string): Promise<string> {
+/** Extract only the detail links from a page (for URL upgrading) */
+export function extractDetailLinksFromHtml(html: string, url: string): string[] {
+  const baseUrl = new URL(url).origin;
+  const links: string[] = [];
+  const seen = new Set<string>();
+  const linkRe = /<a[^>]+href=["']([^"'#]+)['"]/gi;
+  let lm;
+  while ((lm = linkRe.exec(html)) !== null && links.length < 40) {
+    let href = lm[1];
+    if (href.startsWith("/")) href = baseUrl + href;
+    if (!href.startsWith("http") || seen.has(href)) continue;
+    if (/login|register|cookie|privacy|terms|faq|blog|about|contact|javascript:|\.pdf|\.css/i.test(href)) continue;
+    const path = href.replace(baseUrl, "");
+    const segments = path.split("/").filter(Boolean);
+    // Detail pages: deep paths with slugs containing names/IDs
+    const isDetail =
+      // Specific detail path patterns
+      /\/boat\/|\/boot\/|\/yacht\/|\/listing\/|\/offer\/|\/detail\/|\/charter\/[^/]+\/[^/]+/i.test(path) ||
+      // Slug with number (e.g. /concordia-102, /bavaria-46-cruiser)
+      (segments.length >= 2 && /[a-z]+-\d+/i.test(segments[segments.length - 1])) ||
+      // Multi-word slug in last segment (e.g. /bavaria-cruiser-46)
+      (segments.length >= 2 && segments[segments.length - 1].split("-").length >= 3) ||
+      // Booking parameters
+      /checkIn|checkout|booking|reserve/i.test(href) ||
+      // Numeric ID in path (e.g. /boats/12345)
+      (segments.length >= 2 && /^\d{4,}$/.test(segments[segments.length - 1]));
+    if (isDetail) {
+      seen.add(href);
+      links.push(href);
+    }
+  }
+  return links;
+}
+
+export async function fetchPageContent(url: string, rawHtml?: string): Promise<string> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
     const baseUrl = new URL(url).origin;
+    let html = rawHtml || "";
 
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
-        Accept: "text/html",
-        "Accept-Language": "en-US,en;q=0.9,de;q=0.8",
-      },
-    });
-    clearTimeout(timeout);
-    if (!res.ok) return "";
-
-    const html = await res.text();
+    if (!html) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+          Accept: "text/html",
+          "Accept-Language": "en-US,en;q=0.9,de;q=0.8",
+        },
+      });
+      clearTimeout(timeout);
+      if (!res.ok) return "";
+      html = await res.text();
+    }
 
     // Extract boat detail links — broad matching for individual boat pages
     const links: string[] = [];
@@ -216,11 +252,13 @@ export async function fetchPageContent(url: string): Promise<string> {
       .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&euro;/g, "€")
       .replace(/&#\d+;/g, "").replace(/\s+/g, " ").trim();
 
+    // Put BOAT LINKS at the TOP so AI sees them first (before content gets truncated)
     const extras: string[] = [];
-    if (links.length > 0) extras.push(`[BOAT LINKS: ${links.join(" | ")}]`);
+    if (links.length > 0) extras.push(`[BOAT DETAIL LINKS: ${links.join(" | ")}]`);
     if (imgs.length > 0) extras.push(`[IMAGES: ${imgs.join(" | ")}]`);
 
-    return text.slice(0, 6000) + (extras.length > 0 ? "\n" + extras.join("\n") : "");
+    const prefix = extras.length > 0 ? extras.join("\n") + "\n" : "";
+    return prefix + text.slice(0, 5500);
   } catch {
     return "";
   }
