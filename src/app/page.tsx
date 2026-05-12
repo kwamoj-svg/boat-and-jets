@@ -4,18 +4,16 @@ import { useState, useCallback } from "react";
 import { Logo } from "@/components/Logo";
 import { SearchInput } from "@/components/SearchInput";
 import { FilterBar } from "@/components/FilterBar";
-import { GlobeAnimation } from "@/components/GlobeAnimation";
+import { GlobeCanvas } from "@/components/GlobeCanvas";
 import { Waves, Shield, Sparkles, Globe } from "lucide-react";
 import type { DestinationName } from "@/components/FilterBar";
 
 export default function Home() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [globeHighlight, setGlobeHighlight] = useState<DestinationName | null>(null);
+  const [selectedDest, setSelectedDest] = useState<DestinationName | null>(null);
   const handleDropdown = useCallback((open: boolean) => setDropdownOpen(open), []);
 
-  const [selectedDest, setSelectedDest] = useState<DestinationName | null>(null);
-
-  // Hover temporarily highlights; leaving restores selected or null
   const handleDestHover = useCallback((dest: DestinationName | null) => {
     setGlobeHighlight(dest ?? selectedDest);
   }, [selectedDest]);
@@ -27,24 +25,17 @@ export default function Home() {
 
   return (
     <main className="relative min-h-screen flex flex-col">
-      {/* Background layers */}
+      {/* Background */}
       <div className="fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--color-navy-light)_0%,_var(--color-navy)_70%)]" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gold/[0.02] rounded-full blur-[120px]" />
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold/10 to-transparent" />
-        {/* Globe background — reacts to filter selection */}
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity duration-500"
-          style={{ opacity: globeHighlight ? 0.7 : 0.4 }}
-        >
-          <GlobeAnimation highlightDestination={globeHighlight} />
-        </div>
       </div>
 
       {/* Hero */}
-      <section className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pt-10 pb-16">
-        <div className="w-full max-w-4xl mx-auto text-center">
-          <div className="mb-8 animate-fade-in">
+      <section className="flex flex-col items-center px-4 sm:px-6 pt-10 pb-6">
+        <div className="w-full max-w-5xl mx-auto text-center">
+          <div className="mb-6 animate-fade-in">
             <Logo size="large" />
           </div>
 
@@ -55,6 +46,7 @@ export default function Home() {
             AI-Powered Yacht & Boat Discovery
           </p>
 
+          {/* Search bar */}
           <div
             className="animate-fade-in max-w-3xl mx-auto"
             style={{ animationDelay: "0.3s", opacity: 0 }}
@@ -62,10 +54,10 @@ export default function Home() {
             <SearchInput size="large" autoFocus onDropdownChange={handleDropdown} />
           </div>
 
-          {/* Filter system — replaces suggestion chips */}
+          {/* Filter system */}
           {!dropdownOpen && (
             <div
-              className="animate-fade-in"
+              className="animate-fade-in mt-6"
               style={{ animationDelay: "0.45s", opacity: 0 }}
             >
               <FilterBar
@@ -74,6 +66,28 @@ export default function Home() {
               />
             </div>
           )}
+        </div>
+      </section>
+
+      {/* Globe — below the filter, inline in page flow */}
+      <section className="flex justify-center px-4 pb-8">
+        <div
+          className="animate-fade-in transition-opacity duration-500"
+          style={{
+            animationDelay: "0.6s",
+            opacity: 0,
+          }}
+        >
+          <div
+            className="transition-all duration-700"
+            style={{
+              filter: globeHighlight
+                ? "drop-shadow(0 0 40px rgba(200,165,90,0.15))"
+                : "none",
+            }}
+          >
+            <GlobeCanvas highlightDestination={globeHighlight} size={380} />
+          </div>
         </div>
       </section>
 

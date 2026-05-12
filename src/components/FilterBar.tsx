@@ -1,56 +1,40 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   MapPin, Ship, Sailboat, Anchor, Gem, Zap, Users, Euro,
-  ArrowRight, X, ChevronDown,
+  ArrowRight, X, CalendarDays, ChevronDown, Minus, Plus,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-/* ── Destination data (must match GlobeAnimation destinations) ── */
+/* ── Destination data (names must match GlobeCanvas DESTINATIONS) ── */
 export const DESTINATIONS = [
-  { name: "Monaco", region: "Mittelmeer" },
-  { name: "Sardinia", region: "Mittelmeer" },
-  { name: "Ibiza", region: "Mittelmeer" },
-  { name: "Greek Islands", region: "Mittelmeer" },
-  { name: "Croatia", region: "Mittelmeer" },
-  { name: "Amalfi", region: "Mittelmeer" },
-  { name: "Caribbean", region: "Karibik" },
-  { name: "Miami", region: "Amerika" },
-  { name: "Bahamas", region: "Karibik" },
-  { name: "Dubai", region: "Naher Osten" },
-  { name: "Maldives", region: "Indischer Ozean" },
-  { name: "Seychelles", region: "Indischer Ozean" },
-  { name: "Thailand", region: "Asien" },
-  { name: "Sydney", region: "Ozeanien" },
+  { name: "Monaco", region: "Mittelmeer", flag: "🇲🇨" },
+  { name: "Sardinia", region: "Mittelmeer", flag: "🇮🇹" },
+  { name: "Ibiza", region: "Mittelmeer", flag: "🇪🇸" },
+  { name: "Greek Islands", region: "Mittelmeer", flag: "🇬🇷" },
+  { name: "Croatia", region: "Mittelmeer", flag: "🇭🇷" },
+  { name: "Amalfi", region: "Mittelmeer", flag: "🇮🇹" },
+  { name: "Caribbean", region: "Karibik", flag: "🏝️" },
+  { name: "Miami", region: "USA", flag: "🇺🇸" },
+  { name: "Bahamas", region: "Karibik", flag: "🇧🇸" },
+  { name: "Dubai", region: "VAE", flag: "🇦🇪" },
+  { name: "Maldives", region: "Indischer Ozean", flag: "🇲🇻" },
+  { name: "Seychelles", region: "Indischer Ozean", flag: "🇸🇨" },
+  { name: "Thailand", region: "Asien", flag: "🇹🇭" },
+  { name: "Sydney", region: "Australien", flag: "🇦🇺" },
 ] as const;
 
 export type DestinationName = (typeof DESTINATIONS)[number]["name"];
 
 /* ── Boat types ── */
 const BOAT_TYPES: { label: string; value: string; icon: ReactNode }[] = [
-  { label: "Segelboot", value: "sailing", icon: <Sailboat className="w-3.5 h-3.5" /> },
-  { label: "Motorboot", value: "motor", icon: <Zap className="w-3.5 h-3.5" /> },
-  { label: "Katamaran", value: "catamaran", icon: <Ship className="w-3.5 h-3.5" /> },
-  { label: "Superyacht", value: "superyacht", icon: <Gem className="w-3.5 h-3.5" /> },
-  { label: "Gulet", value: "gulet", icon: <Anchor className="w-3.5 h-3.5" /> },
-];
-
-/* ── Budget ranges ── */
-const BUDGETS = [
-  { label: "< 500/Tag", value: "500", query: "unter 500 euro pro tag" },
-  { label: "500-1.000", value: "1000", query: "500 bis 1000 euro pro tag" },
-  { label: "1.000-3.000", value: "3000", query: "1000 bis 3000 euro pro tag" },
-  { label: "3.000+", value: "3000+", query: "ab 3000 euro pro tag luxury" },
-];
-
-/* ── Guest counts ── */
-const GUESTS = [
-  { label: "1-4", value: "4" },
-  { label: "5-8", value: "8" },
-  { label: "9-12", value: "12" },
-  { label: "12+", value: "20" },
+  { label: "Segelboot", value: "sailing", icon: <Sailboat className="w-4 h-4" /> },
+  { label: "Motorboot", value: "motor", icon: <Zap className="w-4 h-4" /> },
+  { label: "Katamaran", value: "catamaran", icon: <Ship className="w-4 h-4" /> },
+  { label: "Superyacht", value: "superyacht", icon: <Gem className="w-4 h-4" /> },
+  { label: "Gulet", value: "gulet", icon: <Anchor className="w-4 h-4" /> },
 ];
 
 interface FilterBarProps {
@@ -58,18 +42,65 @@ interface FilterBarProps {
   onDestinationSelect?: (dest: DestinationName | null) => void;
 }
 
+/* ── Dropdown wrapper ── */
+function Dropdown({ label, icon, value, children, isOpen, onToggle }: {
+  label: string; icon: ReactNode; value?: string; children: ReactNode;
+  isOpen: boolean; onToggle: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node) && isOpen) onToggle();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [isOpen, onToggle]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={onToggle}
+        className={`
+          flex items-center gap-2 px-4 py-3 rounded-xl text-sm
+          transition-all duration-200 whitespace-nowrap
+          ${isOpen
+            ? "bg-gold/15 border-gold/40 text-gold"
+            : value
+              ? "bg-gold/10 border-gold/25 text-gold-light"
+              : "bg-white/[0.04] border-white/[0.08] text-gray-400 hover:bg-white/[0.06] hover:text-gray-300"
+          }
+          border
+        `}
+      >
+        <span className={isOpen ? "text-gold" : value ? "text-gold/70" : "text-gray-500"}>
+          {icon}
+        </span>
+        {value || label}
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-2 z-50 min-w-[280px] rounded-2xl bg-[#131d2e] border border-white/[0.08] shadow-2xl overflow-hidden animate-fade-in">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FilterBar({ onDestinationHover, onDestinationSelect }: FilterBarProps) {
   const router = useRouter();
   const [selectedDest, setSelectedDest] = useState<DestinationName | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
-  const [selectedBudget, setSelectedBudget] = useState<string | null>(null);
-  const [selectedGuests, setSelectedGuests] = useState<string | null>(null);
-  const [expandedSection, setExpandedSection] = useState<string | null>("destination");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [guests, setGuests] = useState(2);
+  const [budget, setBudget] = useState("");
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
-  const hasFilters = selectedDest || selectedType || selectedBudget || selectedGuests;
+  const hasFilters = selectedDest || selectedType || dateFrom || dateTo || budget || guests !== 2;
 
-  const toggleSection = useCallback((section: string) => {
-    setExpandedSection((prev) => (prev === section ? null : section));
+  const toggleDD = useCallback((name: string) => {
+    setOpenDropdown((prev) => (prev === name ? null : name));
   }, []);
 
   const handleDestSelect = useCallback(
@@ -77,6 +108,7 @@ export function FilterBar({ onDestinationHover, onDestinationSelect }: FilterBar
       const next = selectedDest === dest ? null : dest;
       setSelectedDest(next);
       onDestinationSelect?.(next);
+      if (next) setOpenDropdown(null);
     },
     [selectedDest, onDestinationSelect]
   );
@@ -84,8 +116,10 @@ export function FilterBar({ onDestinationHover, onDestinationSelect }: FilterBar
   const clearAll = useCallback(() => {
     setSelectedDest(null);
     setSelectedType(null);
-    setSelectedBudget(null);
-    setSelectedGuests(null);
+    setDateFrom("");
+    setDateTo("");
+    setGuests(2);
+    setBudget("");
     onDestinationSelect?.(null);
   }, [onDestinationSelect]);
 
@@ -94,240 +128,216 @@ export function FilterBar({ onDestinationHover, onDestinationSelect }: FilterBar
     if (selectedType) {
       const bt = BOAT_TYPES.find((t) => t.value === selectedType);
       parts.push(bt?.label || selectedType);
+    } else {
+      parts.push("Boot");
     }
     if (selectedDest) parts.push(selectedDest);
-    if (selectedGuests) parts.push(`${selectedGuests} Gäste`);
-    if (selectedBudget) {
-      const b = BUDGETS.find((b) => b.value === selectedBudget);
-      if (b) parts.push(b.query);
-    }
-    if (parts.length === 0) return;
+    if (guests !== 2) parts.push(`${guests} Personen`);
+    if (budget) parts.push(`max ${budget}€ pro Tag`);
+    if (dateFrom) parts.push(dateFrom);
+    if (parts.length <= 1 && !selectedDest) return;
     router.push(`/search?q=${encodeURIComponent(parts.join(" "))}`);
-  }, [selectedDest, selectedType, selectedBudget, selectedGuests, router]);
+  }, [selectedDest, selectedType, dateFrom, guests, budget, router]);
+
+  // Min date = today
+  const today = new Date().toISOString().split("T")[0];
 
   return (
-    <div className="w-full max-w-4xl mx-auto mt-6">
-      {/* Filter section headers */}
-      <div className="flex flex-wrap justify-center gap-2 mb-4">
-        {[
-          { key: "destination", label: "Ziel", icon: <MapPin className="w-3.5 h-3.5" /> },
-          { key: "type", label: "Bootstyp", icon: <Ship className="w-3.5 h-3.5" /> },
-          { key: "budget", label: "Budget", icon: <Euro className="w-3.5 h-3.5" /> },
-          { key: "guests", label: "Gäste", icon: <Users className="w-3.5 h-3.5" /> },
-        ].map((sec) => {
-          const isActive = expandedSection === sec.key;
-          const hasValue =
-            (sec.key === "destination" && selectedDest) ||
-            (sec.key === "type" && selectedType) ||
-            (sec.key === "budget" && selectedBudget) ||
-            (sec.key === "guests" && selectedGuests);
-          return (
-            <button
-              key={sec.key}
-              onClick={() => toggleSection(sec.key)}
-              className={`
-                flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium
-                transition-all duration-200
-                ${isActive
-                  ? "bg-gold/20 border-gold/40 text-gold"
-                  : hasValue
-                    ? "bg-gold/10 border-gold/25 text-gold-light"
-                    : "bg-white/[0.04] border-white/[0.08] text-gray-400 hover:bg-white/[0.06] hover:text-gray-300"
-                }
-                border
-              `}
-            >
-              <span className={isActive ? "text-gold" : hasValue ? "text-gold/70" : "text-gray-500"}>
-                {sec.icon}
-              </span>
-              {sec.label}
-              {hasValue && !isActive && (
-                <span className="w-1.5 h-1.5 rounded-full bg-gold ml-1" />
-              )}
-              <ChevronDown
-                className={`w-3 h-3 transition-transform duration-200 ${isActive ? "rotate-180" : ""}`}
-              />
-            </button>
-          );
-        })}
+    <div className="w-full max-w-5xl mx-auto">
+      {/* Main filter row */}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {/* Destination */}
+        <Dropdown
+          label="Ziel"
+          icon={<MapPin className="w-4 h-4" />}
+          value={selectedDest || undefined}
+          isOpen={openDropdown === "dest"}
+          onToggle={() => toggleDD("dest")}
+        >
+          <div className="p-3 grid grid-cols-2 gap-1.5 max-h-[320px] overflow-y-auto">
+            {DESTINATIONS.map((d) => {
+              const active = selectedDest === d.name;
+              return (
+                <button
+                  key={d.name}
+                  onClick={() => handleDestSelect(d.name)}
+                  onMouseEnter={() => onDestinationHover?.(d.name)}
+                  onMouseLeave={() => onDestinationHover?.(null)}
+                  className={`
+                    flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm
+                    transition-all duration-150
+                    ${active
+                      ? "bg-gold/20 text-gold"
+                      : "text-gray-300 hover:bg-white/[0.05] hover:text-white"
+                    }
+                  `}
+                >
+                  <span className="text-base">{d.flag}</span>
+                  <div>
+                    <div className={`font-medium ${active ? "text-gold" : ""}`}>{d.name}</div>
+                    <div className="text-[10px] text-gray-500">{d.region}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </Dropdown>
+
+        {/* Boat type */}
+        <Dropdown
+          label="Bootstyp"
+          icon={<Ship className="w-4 h-4" />}
+          value={selectedType ? BOAT_TYPES.find((t) => t.value === selectedType)?.label : undefined}
+          isOpen={openDropdown === "type"}
+          onToggle={() => toggleDD("type")}
+        >
+          <div className="p-2">
+            {BOAT_TYPES.map((t) => {
+              const active = selectedType === t.value;
+              return (
+                <button
+                  key={t.value}
+                  onClick={() => { setSelectedType(active ? null : t.value); setOpenDropdown(null); }}
+                  className={`
+                    w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm
+                    transition-all duration-150
+                    ${active
+                      ? "bg-gold/20 text-gold"
+                      : "text-gray-300 hover:bg-white/[0.05] hover:text-white"
+                    }
+                  `}
+                >
+                  <span className={active ? "text-gold" : "text-gray-500"}>{t.icon}</span>
+                  {t.label}
+                  {active && <span className="ml-auto text-gold">✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </Dropdown>
+
+        {/* Date inputs */}
+        <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-1.5 hover:border-white/[0.12] transition-colors">
+          <CalendarDays className="w-4 h-4 text-gray-500 mr-1" />
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            min={today}
+            placeholder="Anreise"
+            className="bg-transparent text-sm text-gray-300 outline-none w-[120px] [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-40"
+          />
+          <span className="text-gray-600 mx-1">—</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            min={dateFrom || today}
+            placeholder="Abreise"
+            className="bg-transparent text-sm text-gray-300 outline-none w-[120px] [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-40"
+          />
+        </div>
+
+        {/* Guest counter */}
+        <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 hover:border-white/[0.12] transition-colors">
+          <Users className="w-4 h-4 text-gray-500" />
+          <button
+            onClick={() => setGuests(Math.max(1, guests - 1))}
+            className="w-6 h-6 rounded-full bg-white/[0.06] flex items-center justify-center text-gray-400 hover:bg-white/[0.12] hover:text-white transition-colors"
+          >
+            <Minus className="w-3 h-3" />
+          </button>
+          <span className="text-sm text-gray-200 min-w-[16px] text-center tabular-nums">{guests}</span>
+          <button
+            onClick={() => setGuests(Math.min(30, guests + 1))}
+            className="w-6 h-6 rounded-full bg-white/[0.06] flex items-center justify-center text-gray-400 hover:bg-white/[0.12] hover:text-white transition-colors"
+          >
+            <Plus className="w-3 h-3" />
+          </button>
+          <span className="text-xs text-gray-500">Gäste</span>
+        </div>
+
+        {/* Budget input */}
+        <div className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 hover:border-white/[0.12] transition-colors">
+          <Euro className="w-4 h-4 text-gray-500" />
+          <input
+            type="number"
+            value={budget}
+            onChange={(e) => setBudget(e.target.value)}
+            placeholder="Budget"
+            min={0}
+            step={100}
+            className="bg-transparent text-sm text-gray-300 outline-none w-[70px] placeholder:text-gray-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+          />
+          <span className="text-xs text-gray-500">/Tag</span>
+        </div>
+
+        {/* Search button */}
+        <button
+          onClick={handleSearch}
+          disabled={!hasFilters}
+          className="
+            flex items-center gap-2 px-6 py-3 rounded-xl
+            gold-gradient text-navy font-semibold text-sm
+            disabled:opacity-30 disabled:cursor-not-allowed
+            hover:shadow-[0_0_20px_rgba(200,165,90,0.3)]
+            active:scale-95 transition-all duration-200
+          "
+        >
+          Suchen
+          <ArrowRight className="w-4 h-4" />
+        </button>
       </div>
 
-      {/* Expanded filter content */}
-      <div className="overflow-hidden transition-all duration-300">
-        {/* ── Destinations ── */}
-        {expandedSection === "destination" && (
-          <div className="animate-fade-in">
-            <div className="flex flex-wrap justify-center gap-2 px-2">
-              {DESTINATIONS.map((d) => {
-                const active = selectedDest === d.name;
-                return (
-                  <button
-                    key={d.name}
-                    onClick={() => handleDestSelect(d.name)}
-                    onMouseEnter={() => onDestinationHover?.(d.name)}
-                    onMouseLeave={() => onDestinationHover?.(null)}
-                    className={`
-                      px-3.5 py-1.5 rounded-full text-sm
-                      transition-all duration-200
-                      ${active
-                        ? "bg-gold/25 border-gold/50 text-gold shadow-[0_0_12px_rgba(200,165,90,0.15)]"
-                        : "bg-white/[0.03] border-white/[0.06] text-gray-400 hover:bg-white/[0.06] hover:border-gold/20 hover:text-gray-200"
-                      }
-                      border
-                    `}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <MapPin className={`w-3 h-3 ${active ? "text-gold" : "text-gray-600"}`} />
-                      {d.name}
-                      <span className={`text-[10px] ${active ? "text-gold/60" : "text-gray-600"}`}>
-                        {d.region}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── Boat Type ── */}
-        {expandedSection === "type" && (
-          <div className="animate-fade-in">
-            <div className="flex flex-wrap justify-center gap-2 px-2">
-              {BOAT_TYPES.map((t) => {
-                const active = selectedType === t.value;
-                return (
-                  <button
-                    key={t.value}
-                    onClick={() => setSelectedType(active ? null : t.value)}
-                    className={`
-                      px-4 py-2 rounded-full text-sm
-                      transition-all duration-200 flex items-center gap-2
-                      ${active
-                        ? "bg-gold/25 border-gold/50 text-gold shadow-[0_0_12px_rgba(200,165,90,0.15)]"
-                        : "bg-white/[0.03] border-white/[0.06] text-gray-400 hover:bg-white/[0.06] hover:border-gold/20 hover:text-gray-200"
-                      }
-                      border
-                    `}
-                  >
-                    <span className={active ? "text-gold" : "text-gray-500"}>{t.icon}</span>
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── Budget ── */}
-        {expandedSection === "budget" && (
-          <div className="animate-fade-in">
-            <div className="flex flex-wrap justify-center gap-2 px-2">
-              {BUDGETS.map((b) => {
-                const active = selectedBudget === b.value;
-                return (
-                  <button
-                    key={b.value}
-                    onClick={() => setSelectedBudget(active ? null : b.value)}
-                    className={`
-                      px-4 py-2 rounded-full text-sm
-                      transition-all duration-200 flex items-center gap-2
-                      ${active
-                        ? "bg-gold/25 border-gold/50 text-gold shadow-[0_0_12px_rgba(200,165,90,0.15)]"
-                        : "bg-white/[0.03] border-white/[0.06] text-gray-400 hover:bg-white/[0.06] hover:border-gold/20 hover:text-gray-200"
-                      }
-                      border
-                    `}
-                  >
-                    <Euro className={`w-3 h-3 ${active ? "text-gold" : "text-gray-500"}`} />
-                    {b.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── Guests ── */}
-        {expandedSection === "guests" && (
-          <div className="animate-fade-in">
-            <div className="flex flex-wrap justify-center gap-2 px-2">
-              {GUESTS.map((g) => {
-                const active = selectedGuests === g.value;
-                return (
-                  <button
-                    key={g.value}
-                    onClick={() => setSelectedGuests(active ? null : g.value)}
-                    className={`
-                      px-4 py-2 rounded-full text-sm
-                      transition-all duration-200 flex items-center gap-2
-                      ${active
-                        ? "bg-gold/25 border-gold/50 text-gold shadow-[0_0_12px_rgba(200,165,90,0.15)]"
-                        : "bg-white/[0.03] border-white/[0.06] text-gray-400 hover:bg-white/[0.06] hover:border-gold/20 hover:text-gray-200"
-                      }
-                      border
-                    `}
-                  >
-                    <Users className={`w-3 h-3 ${active ? "text-gold" : "text-gray-500"}`} />
-                    {g.label} Gäste
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Active filters + Search button */}
+      {/* Active filter tags */}
       {hasFilters && (
-        <div className="flex flex-wrap items-center justify-center gap-2 mt-4 animate-fade-in">
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-3 animate-fade-in">
           {selectedDest && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-gold/15 text-gold border border-gold/30">
-              <MapPin className="w-3 h-3" />
-              {selectedDest}
-              <button onClick={() => { setSelectedDest(null); onDestinationSelect?.(null); }} className="ml-1 hover:text-white">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
+            <Tag onRemove={() => { setSelectedDest(null); onDestinationSelect?.(null); }}>
+              <MapPin className="w-3 h-3" /> {selectedDest}
+            </Tag>
           )}
           {selectedType && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-gold/15 text-gold border border-gold/30">
+            <Tag onRemove={() => setSelectedType(null)}>
               {BOAT_TYPES.find((t) => t.value === selectedType)?.label}
-              <button onClick={() => setSelectedType(null)} className="ml-1 hover:text-white">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
+            </Tag>
           )}
-          {selectedBudget && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-gold/15 text-gold border border-gold/30">
-              <Euro className="w-3 h-3" />
-              {BUDGETS.find((b) => b.value === selectedBudget)?.label}
-              <button onClick={() => setSelectedBudget(null)} className="ml-1 hover:text-white">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
+          {dateFrom && (
+            <Tag onRemove={() => setDateFrom("")}>
+              <CalendarDays className="w-3 h-3" /> {dateFrom}
+            </Tag>
           )}
-          {selectedGuests && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-gold/15 text-gold border border-gold/30">
-              <Users className="w-3 h-3" />
-              {selectedGuests} Gäste
-              <button onClick={() => setSelectedGuests(null)} className="ml-1 hover:text-white">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
+          {dateTo && (
+            <Tag onRemove={() => setDateTo("")}>
+              bis {dateTo}
+            </Tag>
           )}
-          <button onClick={clearAll} className="text-xs text-gray-500 hover:text-gray-300 underline ml-1">
+          {guests !== 2 && (
+            <Tag onRemove={() => setGuests(2)}>
+              <Users className="w-3 h-3" /> {guests} Gäste
+            </Tag>
+          )}
+          {budget && (
+            <Tag onRemove={() => setBudget("")}>
+              <Euro className="w-3 h-3" /> {budget}€/Tag
+            </Tag>
+          )}
+          <button onClick={clearAll} className="text-xs text-gray-500 hover:text-gray-300 underline ml-1 transition-colors">
             Alle löschen
-          </button>
-          <button
-            onClick={handleSearch}
-            className="ml-2 flex items-center gap-2 px-5 py-2 rounded-full gold-gradient text-navy font-medium text-sm hover:shadow-[0_0_20px_rgba(200,165,90,0.3)] active:scale-95 transition-all duration-200"
-          >
-            Suchen
-            <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       )}
     </div>
+  );
+}
+
+function Tag({ children, onRemove }: { children: ReactNode; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-gold/10 text-gold border border-gold/25">
+      {children}
+      <button onClick={onRemove} className="ml-0.5 hover:text-white transition-colors">
+        <X className="w-3 h-3" />
+      </button>
+    </span>
   );
 }
