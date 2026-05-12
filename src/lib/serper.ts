@@ -165,18 +165,31 @@ export async function fetchPageContent(url: string): Promise<string> {
 
     const html = await res.text();
 
-    // Extract boat detail links (href containing boat/yacht/charter keywords)
+    // Extract boat detail links — broad matching for individual boat pages
     const links: string[] = [];
+    const seenLinks = new Set<string>();
     const linkRe = /<a[^>]+href=["']([^"'#]+)['"]/gi;
     let lm;
-    while ((lm = linkRe.exec(html)) !== null && links.length < 15) {
+    while ((lm = linkRe.exec(html)) !== null && links.length < 30) {
       let href = lm[1];
       if (href.startsWith("/")) href = baseUrl + href;
-      if (href.startsWith("http") &&
-          !href.includes("login") && !href.includes("register") && !href.includes("cookie") &&
-          (href.includes("boat") || href.includes("yacht") || href.includes("charter") ||
-           href.includes("catamaran") || href.includes("rental") || href.includes("alquiler") ||
-           href.includes("gulet") || href.includes("sailing") || href.includes("propiedad"))) {
+      if (!href.startsWith("http") || seenLinks.has(href)) continue;
+      // Skip non-boat pages
+      if (href.includes("login") || href.includes("register") || href.includes("cookie") ||
+          href.includes("privacy") || href.includes("terms") || href.includes("faq") ||
+          href.includes("blog") || href.includes("about") || href.includes("contact") ||
+          href.includes("javascript:") || href.includes(".pdf") || href.includes(".css")) continue;
+      // Individual boat detail pages have slug-like paths with specific names
+      const path = href.replace(baseUrl, "");
+      const isDetailPage =
+        // URL contains boat-related keywords
+        /boat|yacht|charter|catamaran|rental|alquiler|gulet|sailing|propiedad|vessel|ship|fleet|boot/i.test(href) ||
+        // URL has a deep path suggesting a detail page (e.g. /en/boot/concordia-102)
+        (path.split("/").filter(Boolean).length >= 2 && /[a-z]+-\d+|[a-z]+-[a-z]+-[a-z]+/i.test(path)) ||
+        // URL has checkIn/checkOut or similar booking params
+        /checkIn|checkout|booking|reserve|detail|offer/i.test(href);
+      if (isDetailPage) {
+        seenLinks.add(href);
         links.push(href);
       }
     }

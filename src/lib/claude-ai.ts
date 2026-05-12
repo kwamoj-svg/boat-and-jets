@@ -145,13 +145,17 @@ QUALITY FILTER:
 - If a page lists multiple boats (e.g. a fleet page), extract EACH individual boat separately
 - match_score: 0.85+ = perfect match, 0.7-0.84 = good, 0.5-0.69 = partial
 
-RULES:
-1. Extract AS MANY boats as possible. Max 25. The more the better.
-2. source_url: Use DIRECT boat detail URL from [BOAT LINKS: ...]. NEVER use homepage/category URLs.
-3. image_url: Match from [IMAGES: ...] to each boat.
-4. Diversify across pages. Be exact with prices (per day/week/sale).
-5. type: motor|sailing|catamaran|superyacht|speedboat|gulet
-6. country/port: Use the ACTUAL location of the boat, not just the search location.
+CRITICAL URL RULES:
+1. source_url MUST be a URL for ONE SPECIFIC BOAT — a detail/product page with the boat name or ID in the URL path.
+   GOOD examples: /boot/concordia-102-ac-joanne, /yacht/sunseeker-50, /en/boat/12345, /listing/bavaria-46
+   BAD examples: /search, /results, /boats, /fleet, /yacht-charter/hamburg, /en/boat-rental/germany (these are CATEGORY pages!)
+2. Look in [BOAT LINKS: ...] for detail URLs. Pick the one matching each boat's name/model.
+3. If no detail URL exists for a boat, use the best available URL but set match_score to 0.5.
+4. Extract AS MANY boats as possible. Max 25. The more the better.
+5. image_url: Match from [IMAGES: ...] to each boat.
+6. Diversify across pages. Be exact with prices (per day/week/sale).
+7. type: motor|sailing|catamaran|superyacht|speedboat|gulet
+8. country/port: Use the ACTUAL location of the boat, not just the search location.
 
 JSON array only:
 [{"name":"","type":"","brand":null,"model":null,"year":null,"length_ft":null,"cabins":null,"guests":null,"crew":null,"price_per_week":null,"price_per_day":null,"sale_price":null,"currency":"EUR","region":"","country":"","port":null,"features":[],"description":"","source_url":"DIRECT BOAT URL","source_title":"","image_url":null,"luxury_level":3,"match_score":0.8,"match_reasons":[],"ai_summary":""}]`,
@@ -192,7 +196,8 @@ Rules:
 - Extract any boat/yacht available for ${parsedQuery.intent === "buy" ? "sale" : "charter or rental"}
 - REJECT only: tours, sailing schools, ferries, sightseeing
 - If a snippet mentions a platform with boats (e.g. "20+ boats available"), create a listing for that platform
-- source_url = search result URL. Diversify across domains. Max 12.
+- source_url: PREFER URLs that point to a SPECIFIC BOAT page (containing boat name/slug/ID in path). If the search result URL is a category/search page, still use it but set match_score to 0.55.
+- Diversify across domains. Max 12.
 
 JSON array only:
 [{"name":"","type":"","brand":null,"model":null,"year":null,"length_ft":null,"cabins":null,"guests":null,"crew":null,"price_per_week":null,"price_per_day":null,"sale_price":null,"currency":"EUR","region":"","country":"","port":null,"features":[],"description":"","source_url":"","source_title":"","image_url":null,"luxury_level":3,"match_score":0.65,"match_reasons":[],"ai_summary":""}]`,

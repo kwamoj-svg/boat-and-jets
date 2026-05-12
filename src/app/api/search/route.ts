@@ -190,10 +190,18 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // Normalize prices
+        // Normalize prices + penalize category URLs
         for (const l of allListings) {
           if (l.price_per_day && !l.price_per_week) {
             l.price_per_week = l.price_per_day * 7;
+          }
+          // Penalize listings with obvious category/search page URLs
+          const path = new URL(l.source_url).pathname;
+          const isCategory = /^\/(en|de|fr|es|it)?\/?$/.test(path) ||
+            /\/(search|results|fleet|boats?-list|yacht-charter|boat-rental)\/?$/i.test(path) ||
+            path.split("/").filter(Boolean).length <= 1;
+          if (isCategory) {
+            l.match_score = Math.min(l.match_score, 0.5);
           }
         }
 
