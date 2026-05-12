@@ -167,7 +167,7 @@ export async function GET(req: NextRequest) {
           if (count >= 3) return false;
           sourceCounts.set(domain, count + 1);
           return true;
-        }).slice(0, 15);
+        }).slice(0, 20);
 
         // Stream results
         const finalPlatforms = new Set(finalListings.map(l => getDomain(l.source_url))).size;

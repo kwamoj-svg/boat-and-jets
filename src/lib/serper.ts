@@ -140,6 +140,7 @@ export async function fetchPageContent(url: string): Promise<string> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 6000);
+    const baseUrl = new URL(url).origin;
 
     const res = await fetch(url, {
       signal: controller.signal,
@@ -154,13 +155,31 @@ export async function fetchPageContent(url: string): Promise<string> {
 
     const html = await res.text();
 
+    // Extract boat detail links (href containing boat/yacht/charter keywords)
+    const links: string[] = [];
+    const linkRe = /<a[^>]+href=["']([^"'#]+)['"]/gi;
+    let lm;
+    while ((lm = linkRe.exec(html)) !== null && links.length < 15) {
+      let href = lm[1];
+      if (href.startsWith("/")) href = baseUrl + href;
+      if (href.startsWith("http") &&
+          !href.includes("login") && !href.includes("register") && !href.includes("cookie") &&
+          (href.includes("boat") || href.includes("yacht") || href.includes("charter") ||
+           href.includes("catamaran") || href.includes("rental") || href.includes("alquiler") ||
+           href.includes("gulet") || href.includes("sailing") || href.includes("propiedad"))) {
+        links.push(href);
+      }
+    }
+
     // Extract images
     const imgs: string[] = [];
     const imgRe = /<img[^>]+src=["']([^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)['"]/gi;
     let m;
-    while ((m = imgRe.exec(html)) !== null && imgs.length < 5) {
-      if (m[1].startsWith("http") && !m[1].includes("icon") && !m[1].includes("logo")) {
-        imgs.push(m[1]);
+    while ((m = imgRe.exec(html)) !== null && imgs.length < 8) {
+      let src = m[1];
+      if (src.startsWith("/")) src = baseUrl + src;
+      if (src.startsWith("http") && !src.includes("icon") && !src.includes("logo") && !src.includes("sprite") && src.length > 30) {
+        imgs.push(src);
       }
     }
 
@@ -174,8 +193,11 @@ export async function fetchPageContent(url: string): Promise<string> {
       .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&euro;/g, "€")
       .replace(/&#\d+;/g, "").replace(/\s+/g, " ").trim();
 
-    const imgSection = imgs.length > 0 ? `\n[IMAGES: ${imgs.join(" | ")}]` : "";
-    return text.slice(0, 6000) + imgSection;
+    const extras: string[] = [];
+    if (links.length > 0) extras.push(`[BOAT LINKS: ${links.join(" | ")}]`);
+    if (imgs.length > 0) extras.push(`[IMAGES: ${imgs.join(" | ")}]`);
+
+    return text.slice(0, 6000) + (extras.length > 0 ? "\n" + extras.join("\n") : "");
   } catch {
     return "";
   }

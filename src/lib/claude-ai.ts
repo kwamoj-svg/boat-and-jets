@@ -62,7 +62,7 @@ export async function parseUserQuery(raw: string): Promise<ParsedUserQuery> {
     messages: [
       {
         role: "user",
-        content: `Parse this yacht/boat search query. Fix typos. Understand DE/EN/FR.
+        content: `Parse this yacht/boat search query. Fix typos. Understand DE/EN/FR/ES.
 "${raw}"
 JSON only:
 {"intent":"charter|buy|explore","region":null,"country":null,"budget_max":null,"currency":"EUR","boat_type":null,"guests":null,"date":null,"style":null,"keywords":[],"corrected_query":null}`,
@@ -80,7 +80,6 @@ export async function extractBoatsFromPages(
   pages: { url: string; title: string; content: string }[],
   parsedQuery: ParsedUserQuery
 ): Promise<ExtractedListing[]> {
-  // Trim content aggressively to save tokens
   const pagesText = pages
     .map((p, i) => `[PAGE ${i + 1}] ${p.url}\n${p.title}\n${p.content.slice(0, 5000)}`)
     .join("\n---\n");
@@ -91,17 +90,26 @@ export async function extractBoatsFromPages(
 
   const msg = await getClient().messages.create({
     model: MODEL,
-    max_tokens: 6000,
+    max_tokens: 8000,
     messages: [
       {
         role: "user",
-        content: `Extract specific named boats from these pages. Search: "${search}" | Intent: ${parsedQuery.intent} | Location: ${loc} | Budget: ${budget} | Type: ${parsedQuery.boat_type || "any"} | Guests: ${parsedQuery.guests || "any"}
+        content: `You are a yacht comparison engine. Extract EVERY specific boat from these pages.
+
+Search: "${search}" | Intent: ${parsedQuery.intent} | Location: ${loc} | Budget: ${budget} | Type: ${parsedQuery.boat_type || "any"} | Guests: ${parsedQuery.guests || "any"}
 
 ${pagesText}
 
-Rules: Real names only. Diversify across pages. Include image URLs if found in [IMAGES]. Max 10 boats.
+CRITICAL RULES:
+1. Extract ALL named boats you find. The more the better. Max 15.
+2. source_url MUST be the DIRECT link to that specific boat's detail page. Look in [BOAT LINKS: ...] for the exact URL that matches each boat name. If the page URL contains the boat name/slug, use it. NEVER use the homepage or category page as source_url.
+3. image_url: Look in [IMAGES: ...] and match images to boats. Pick the one most likely showing that boat.
+4. Diversify across ALL pages — don't skip any page.
+5. Be exact with prices. per day = price_per_day, per week = price_per_week, for sale = sale_price.
+6. type must be one of: motor|sailing|catamaran|superyacht|speedboat|gulet
+
 JSON array only:
-[{"name":"","type":"motor|sailing|catamaran|superyacht|speedboat|gulet","brand":null,"model":null,"year":null,"length_ft":null,"cabins":null,"guests":null,"crew":null,"price_per_week":null,"price_per_day":null,"sale_price":null,"currency":"EUR","region":"","country":"","port":null,"features":[],"description":"","source_url":"","source_title":"","image_url":null,"luxury_level":3,"match_score":0.8,"match_reasons":[],"ai_summary":""}]`,
+[{"name":"","type":"","brand":null,"model":null,"year":null,"length_ft":null,"cabins":null,"guests":null,"crew":null,"price_per_week":null,"price_per_day":null,"sale_price":null,"currency":"EUR","region":"","country":"","port":null,"features":[],"description":"","source_url":"DIRECT BOAT URL","source_title":"","image_url":null,"luxury_level":3,"match_score":0.8,"match_reasons":[],"ai_summary":""}]`,
       },
     ],
   });
@@ -126,15 +134,20 @@ export async function extractListingsFromSearchResults(
 
   const msg = await getClient().messages.create({
     model: MODEL,
-    max_tokens: 4000,
+    max_tokens: 5000,
     messages: [
       {
         role: "user",
-        content: `Extract named boats from snippets. Search: "${search}" | Intent: ${parsedQuery.intent} | Location: ${parsedQuery.country || parsedQuery.region || "any"}
+        content: `Extract specific named boats from search snippets. Search: "${search}" | Intent: ${parsedQuery.intent} | Location: ${parsedQuery.country || parsedQuery.region || "any"}
 
 ${resultsText}
 
-Only specific named boats from different URLs. Max 6. JSON array only:
+Rules:
+- Only boats where snippet mentions a SPECIFIC name or model
+- source_url = the search result URL (these are usually detail pages already)
+- Diversify across URLs. Max 8.
+
+JSON array only:
 [{"name":"","type":"","brand":null,"model":null,"year":null,"length_ft":null,"cabins":null,"guests":null,"crew":null,"price_per_week":null,"price_per_day":null,"sale_price":null,"currency":"EUR","region":"","country":"","port":null,"features":[],"description":"","source_url":"","source_title":"","image_url":null,"luxury_level":3,"match_score":0.65,"match_reasons":[],"ai_summary":""}]`,
       },
     ],
