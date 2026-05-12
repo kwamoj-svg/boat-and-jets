@@ -56,6 +56,7 @@ export function buildSearchQueries(parsed: {
   country?: string;
   boat_type?: string;
   budget_max?: number;
+  budget_per_day?: number;
   currency?: string;
   guests?: number;
   date?: string;
@@ -66,7 +67,10 @@ export function buildSearchQueries(parsed: {
   const queries: string[] = [];
   const loc = parsed.country || parsed.region || "";
   const type = parsed.boat_type || "yacht";
-  const budget = parsed.budget_max ? `under ${parsed.currency || "€"}${parsed.budget_max}` : "";
+  const cur = parsed.currency || "€";
+  const budget = parsed.budget_per_day
+    ? `under ${cur}${parsed.budget_per_day} per day`
+    : parsed.budget_max ? `under ${cur}${parsed.budget_max}` : "";
   const guests = parsed.guests ? `${parsed.guests} guests` : "";
   const intent = parsed.intent === "buy" ? "for sale" : "charter";
 

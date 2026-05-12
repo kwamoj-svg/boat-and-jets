@@ -8,6 +8,7 @@ interface ParsedQuery {
   region?: string;
   country?: string;
   budget_max?: number;
+  budget_per_day?: number;
   currency?: string;
   boat_type?: string;
   guests?: number;
@@ -25,7 +26,10 @@ export function QueryInsight({ parsed }: { parsed: ParsedQuery }) {
   if (parsed.boat_type) tags.push({ icon: <Ship className="w-3.5 h-3.5" />, label: parsed.boat_type });
   if (parsed.guests) tags.push({ icon: <Users className="w-3.5 h-3.5" />, label: `${parsed.guests} guests` });
   if (parsed.date) tags.push({ icon: <Calendar className="w-3.5 h-3.5" />, label: parsed.date });
-  if (parsed.budget_max) {
+  if (parsed.budget_per_day) {
+    const sym = parsed.currency === "USD" ? "$" : "€";
+    tags.push({ icon: <Wallet className="w-3.5 h-3.5" />, label: `≤ ${sym}${formatPrice(parsed.budget_per_day)}/day` });
+  } else if (parsed.budget_max) {
     const sym = parsed.currency === "USD" ? "$" : "€";
     tags.push({ icon: <Wallet className="w-3.5 h-3.5" />, label: `≤ ${sym}${formatPrice(parsed.budget_max)}` });
   }

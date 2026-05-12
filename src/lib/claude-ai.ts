@@ -17,6 +17,7 @@ export interface ParsedUserQuery {
   region?: string;
   country?: string;
   budget_max?: number;
+  budget_per_day?: number;
   currency: string;
   boat_type?: string;
   guests?: number;
@@ -56,16 +57,43 @@ export interface ExtractedListing {
 }
 
 export async function parseUserQuery(raw: string): Promise<ParsedUserQuery> {
+  const today = new Date().toISOString().split("T")[0];
+
   const msg = await getClient().messages.create({
     model: MODEL,
-    max_tokens: 400,
+    max_tokens: 500,
     messages: [
       {
         role: "user",
-        content: `Parse this yacht/boat search query. Fix typos. Understand DE/EN/FR/ES.
-"${raw}"
+        content: `You parse casual, everyday boat search queries. Users type like they text — short, sloppy, any language.
+
+TODAY IS: ${today}
+
+EXAMPLES of real user input → how to parse:
+- "Boot 300€ pro tag max übermorgen" → intent:charter, budget_per_day:300, date:${(() => { const d = new Date(); d.setDate(d.getDate() + 2); return d.toISOString().split("T")[0]; })()}, currency:EUR
+- "segeln kroatien 4 pers nächste woche" → intent:charter, country:Croatia, guests:4, boat_type:sailing, date:next monday
+- "yacht kaufen mittelmeer bis 500k" → intent:buy, region:Mediterranean, budget_max:500000
+- "katamaran ibiza 10 leute party" → intent:charter, boat_type:catamaran, country:Spain, guests:10, style:party
+- "günstig boot mieten mallorca" → intent:charter, country:Spain, style:budget
+- "location bateau corse 6 personnes" → intent:charter, country:France, guests:6
+- "motor yacht dubai weekend 20 guests" → intent:charter, country:UAE, guests:20, boat_type:motor
+- "segelboot 2 wochen griechenland august" → intent:charter, boat_type:sailing, country:Greece, date:2025-08-01
+- "Houseboat Amsterdam 4 Personen" → intent:charter, boat_type:houseboat, country:Netherlands, guests:4
+
+RULES:
+- Fix ALL typos (Boot→Boat is NOT a typo, Boot=Boat in German)
+- "pro tag/per day/al giorno/par jour" → budget_per_day (NOT budget_max)
+- "pro woche/per week/par semaine" → budget_max (= weekly budget)
+- Relative dates: morgen/tomorrow=+1day, übermorgen=+2days, nächste Woche/next week=next monday, nächsten Monat=1st of next month
+- "max/bis/under/unter/moins de" = budget limit
+- "pers/personen/leute/pax/guests/personnes" = guests
+- "kaufen/buy/acheter/comprar" = buy intent
+- "mieten/chartern/rent/charter/location/alquiler/noleggio" = charter intent
+
+Parse: "${raw}"
+
 JSON only:
-{"intent":"charter|buy|explore","region":null,"country":null,"budget_max":null,"currency":"EUR","boat_type":null,"guests":null,"date":null,"style":null,"keywords":[],"corrected_query":null}`,
+{"intent":"charter|buy|explore","region":null,"country":null,"budget_max":null,"budget_per_day":null,"currency":"EUR","boat_type":null,"guests":null,"date":null,"style":null,"keywords":[],"corrected_query":null}`,
       },
     ],
   });
@@ -73,7 +101,19 @@ JSON only:
   const text = msg.content[0].type === "text" ? msg.content[0].text : "";
   const json = JSON.parse(text.replace(/```json?\n?/g, "").replace(/```/g, "").trim());
 
-  return { ...json, currency: json.currency || "EUR", keywords: json.keywords || [], corrected_query: json.corrected_query || undefined, raw };
+  // Convert daily budget to weekly for search
+  const budgetPerDay = json.budget_per_day || undefined;
+  const budgetMax = json.budget_max || (budgetPerDay ? budgetPerDay * 7 : undefined);
+
+  return {
+    ...json,
+    budget_max: budgetMax,
+    budget_per_day: budgetPerDay,
+    currency: json.currency || "EUR",
+    keywords: json.keywords || [],
+    corrected_query: json.corrected_query || undefined,
+    raw,
+  };
 }
 
 export async function extractBoatsFromPages(
@@ -86,7 +126,9 @@ export async function extractBoatsFromPages(
 
   const search = parsedQuery.corrected_query || parsedQuery.raw;
   const loc = parsedQuery.country || parsedQuery.region || "any";
-  const budget = parsedQuery.budget_max ? `${parsedQuery.currency}${parsedQuery.budget_max}` : "any";
+  const budget = parsedQuery.budget_per_day
+    ? `${parsedQuery.currency}${parsedQuery.budget_per_day}/day (${parsedQuery.currency}${parsedQuery.budget_max}/week)`
+    : parsedQuery.budget_max ? `${parsedQuery.currency}${parsedQuery.budget_max}` : "any";
 
   const msg = await getClient().messages.create({
     model: MODEL,
