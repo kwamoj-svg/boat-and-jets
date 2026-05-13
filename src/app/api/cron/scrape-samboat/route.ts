@@ -172,14 +172,14 @@ function buildAffiliateUrl(url: string): string {
 }
 
 /** Get or create the Samboat "company" row */
-async function getSamboatCompany(db: SupabaseClient): Promise<string | null> {
+async function getSamboatCompany(db: SupabaseClient): Promise<{ id: string | null; error: string | null }> {
   const slug = "samboat";
   const existing = await db
     .from("charter_companies")
     .select("id")
     .eq("slug", slug)
     .maybeSingle();
-  if (existing.data) return (existing.data as { id: string }).id;
+  if (existing.data) return { id: (existing.data as { id: string }).id, error: null };
 
   const created = await db
     .from("charter_companies")
@@ -198,7 +198,10 @@ async function getSamboatCompany(db: SupabaseClient): Promise<string | null> {
     } as Record<string, unknown>)
     .select("id")
     .single();
-  return (created.data as { id: string } | null)?.id ?? null;
+  if (created.error) {
+    return { id: null, error: created.error.message };
+  }
+  return { id: (created.data as { id: string } | null)?.id ?? null, error: null };
 }
 
 export async function GET(req: NextRequest) {
@@ -217,8 +220,16 @@ export async function GET(req: NextRequest) {
   const skip = Math.max(0, parseInt(req.nextUrl.searchParams.get("skip") || "0"));
   const countryFilter = req.nextUrl.searchParams.get("country");
 
-  const companyId = await getSamboatCompany(db);
-  if (!companyId) return NextResponse.json({ error: "Could not init Samboat company row" }, { status: 500 });
+  const { id: companyId, error: companyErr } = await getSamboatCompany(db);
+  if (!companyId) {
+    return NextResponse.json({
+      error: "Could not init Samboat company row",
+      detail: companyErr,
+      hint: companyErr?.includes("row-level security")
+        ? "Run admin-fix-rls.sql or set SUPABASE_SERVICE_ROLE_KEY"
+        : null,
+    }, { status: 500 });
+  }
 
   // Stream sitemap & extract URLs
   const controller = new AbortController();
