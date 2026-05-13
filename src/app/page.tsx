@@ -159,8 +159,8 @@ export default function Home() {
 
   return (
     <main className="relative min-h-screen flex flex-col">
-      {/* Show navbar when results are visible */}
-      {hasResults && <Navbar showSearch searchQuery={searchQuery} />}
+      {/* Navbar always visible — shows search bar only when results are showing */}
+      <Navbar showSearch={hasResults} searchQuery={searchQuery} />
 
       {/* Background gradient */}
       <div className="fixed inset-0 -z-10">
