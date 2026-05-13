@@ -648,6 +648,22 @@ const CB_LOCATION_ALIASES: Record<string, string[]> = {
   spain: ["spanien", "spain", "barcelona", "valencia", "malaga", "alicante"],
 };
 
+/** Derive country name from a city slug using alias maps */
+const CITY_TO_COUNTRY: Record<string, string> = {};
+(function buildCityCountryMap() {
+  const countryNames: Record<string, string> = {
+    ibiza: "Spain", mallorca: "Spain", sardinia: "Italy",
+    croatia: "Croatia", greece: "Greece", italy: "Italy",
+    france: "France", turkey: "Turkey", spain: "Spain",
+  };
+  for (const [region, aliases] of Object.entries(CB_LOCATION_ALIASES)) {
+    const country = countryNames[region] || "";
+    for (const alias of aliases) {
+      if (country) CITY_TO_COUNTRY[alias] = country;
+    }
+  }
+})();
+
 function cbLocationMatches(city: string, locLower: string): boolean {
   if (city.includes(locLower) || locLower.includes(city)) return true;
   // Check aliases
@@ -702,6 +718,7 @@ async function scrapeClickAndBoatSitemap(location: string, boatType?: string): P
       const type = typeSlug.includes("segel") ? "sailing" : typeSlug.includes("katamaran") ? "catamaran" : typeSlug.includes("schlauchboot") ? "speedboat" : "motor";
       const parts = cleanSlug.split("-");
       const brand = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : undefined;
+      const derivedCountry = CITY_TO_COUNTRY[city] || CITY_TO_COUNTRY[city.split("-")[0]] || "";
 
       listings.push({
         name,
@@ -718,7 +735,7 @@ async function scrapeClickAndBoatSitemap(location: string, boatType?: string): P
         sale_price: undefined,
         currency: "EUR",
         region: "",
-        country: "",
+        country: derivedCountry,
         port: cityName,
         features: [],
         description: `${name} for charter in ${cityName} via Click&Boat.`,
@@ -733,8 +750,8 @@ async function scrapeClickAndBoatSitemap(location: string, boatType?: string): P
     }
   }
 
-  // Enrich first 15 with prices from detail pages (parallel, fast)
-  const enrichBatch = listings.slice(0, 15);
+  // Enrich first 25 with prices from detail pages (parallel, fast)
+  const enrichBatch = listings.slice(0, 25);
   await Promise.allSettled(
     enrichBatch.map(async (b) => {
       try {
@@ -827,9 +844,10 @@ async function scrapeSamboatSitemap(location: string, boatType?: string): Promis
 
     const cityName = decodeURIComponent(city).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     const typeName = decodeURIComponent(typeSlug).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const sbCountry = CITY_TO_COUNTRY[city] || CITY_TO_COUNTRY[city.split("-")[0]] || "";
 
     listings.push({
-      name: `${typeName} ${cityName} #${id}`,
+      name: `${typeName} ${cityName}`,
       type: stdType,
       brand: undefined,
       model: undefined,
@@ -843,7 +861,7 @@ async function scrapeSamboatSitemap(location: string, boatType?: string): Promis
       sale_price: undefined,
       currency: "EUR",
       region: "",
-      country: "",
+      country: sbCountry,
       port: cityName,
       features: [],
       description: `${typeName} for charter in ${cityName} via Samboat.`,
@@ -857,8 +875,8 @@ async function scrapeSamboatSitemap(location: string, boatType?: string): Promis
     } as ExtractedListing);
   }
 
-  // Enrich first 15 with names + images from detail pages (parallel, fast)
-  const enrichBatch = listings.slice(0, 15);
+  // Enrich first 25 with names + images from detail pages (parallel, fast)
+  const enrichBatch = listings.slice(0, 25);
   const enrichResults = await Promise.allSettled(
     enrichBatch.map(async (b) => {
       const html = await fetchWithTimeout(b.source_url, 3500);
@@ -876,6 +894,17 @@ async function scrapeSamboatSitemap(location: string, boatType?: string): Promis
       }
       const ogImg = html.match(/og:image['"]\s*content=['"](https?:\/\/[^'"]+)['"]/);
       if (ogImg) b.image_url = ogImg[1];
+      // Extract price
+      const priceMatch = html.match(/(?:price|preis|ab|from)\s*[:\s]*(\d[\d.,]*)\s*€/i)
+        || html.match(/(\d[\d.,]*)\s*€\s*\/\s*(?:Tag|jour|day)/i)
+        || html.match(/"price"\s*:\s*"?(\d[\d.,]*)"?/);
+      if (priceMatch && !b.price_per_day) {
+        const price = Number(priceMatch[1].replace(/\./g, "").replace(",", "."));
+        if (price > 0 && price < 50000) {
+          b.price_per_day = price;
+          b.price_per_week = price * 7;
+        }
+      }
     })
   );
 

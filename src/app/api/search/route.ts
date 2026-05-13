@@ -80,6 +80,7 @@ const TYPE_COMPAT: Record<string, string[]> = {
   houseboat: ["houseboat", "hausboot"],
   gulet: ["gulet"],
   superyacht: ["superyacht", "super yacht", "mega yacht", "megayacht"],
+  yacht: ["yacht", "motor", "sailing", "catamaran", "motor yacht", "motoryacht", "superyacht", "gulet", "flybridge", "trawler"],
 };
 
 function typeMatches(listingType: string, requestedType: string): boolean {
@@ -139,8 +140,8 @@ function postProcess(listings: ExtractedListing[], parsed: ParsedUserQuery): Ext
       }
     }
 
-    // Demote generic sitemap names
-    if (/^(Segelboot|Motorboot|Katamaran|Schlauchboot|Hausboot)\s+\S+\s+#\d+$/i.test(l.name || "")) {
+    // Demote generic sitemap names (e.g. "Motorboot Korfu", "Segelboot Split")
+    if (/^(Segelboot|Motorboot|Katamaran|Schlauchboot|Hausboot)\s+\S+(\s+#\d+)?$/i.test(l.name || "")) {
       l.match_score = Math.min(l.match_score, 0.4);
     }
 
