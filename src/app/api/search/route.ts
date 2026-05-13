@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
 
         send("stage", { stage: "database", message: "Durchsuche Bootskatalog..." });
 
-        const results = await searchCharterBoats({
+        const searchOpts = {
           query: q,
           country: parsed.country || undefined,
           region: parsed.region || undefined,
@@ -45,7 +45,9 @@ export async function GET(req: NextRequest) {
           guests: parsed.guests || undefined,
           budgetPerDay: parsed.budget_per_day || undefined,
           limit: 60,
-        });
+        };
+        send("stage", { stage: "debug", searchOpts });
+        const results = await searchCharterBoats(searchOpts);
 
         if (results.length > 0) {
           send("stage", {
