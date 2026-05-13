@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Heart, Search, Bell, Anchor, Clock,
   Settings, ChevronRight, MapPin, Star,
-  Calendar, Compass, Ship, Globe,
+  Calendar, Compass, Ship, Globe, Briefcase,
 } from "lucide-react";
 
 export const metadata = {
@@ -76,7 +76,7 @@ export default async function DashboardPage() {
           </div>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8">
             <Link
               href="/"
               className="group bg-white/[0.03] border border-white/10 rounded-xl p-4 hover:border-gold/30 hover:bg-gold/[0.03] transition-all"
@@ -100,6 +100,14 @@ export default async function DashboardPage() {
               <Globe className="w-5 h-5 text-gold/60 group-hover:text-gold mb-2" />
               <p className="text-sm text-white font-medium">Netzwerk</p>
               <p className="text-xs text-gray-500 mt-0.5">Yacht-Partner</p>
+            </Link>
+            <Link
+              href="/crm"
+              className="group bg-white/[0.03] border border-white/10 rounded-xl p-4 hover:border-gold/30 hover:bg-gold/[0.03] transition-all"
+            >
+              <Briefcase className="w-5 h-5 text-gold/60 group-hover:text-gold mb-2" />
+              <p className="text-sm text-white font-medium">CRM</p>
+              <p className="text-xs text-gray-500 mt-0.5">Pipeline & Kontakte</p>
             </Link>
             {isAdmin ? (
               <Link

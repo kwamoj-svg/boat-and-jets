@@ -38,6 +38,12 @@ export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
               Network
             </Link>
             <Link
+              href="/crm"
+              className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
+            >
+              CRM
+            </Link>
+            <Link
               href="/partner/register"
               className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
             >

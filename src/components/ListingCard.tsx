@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Users, Ruler, MapPin, Sparkles, ExternalLink, Anchor, Info } from "lucide-react";
 import { formatPrice } from "@/lib/format";
 import type { ExtractedListing } from "@/lib/claude-ai";
+import { AddToCrmButton } from "./AddToCrmButton";
 
 // Fallback images by boat type — always show a relevant photo
 const FALLBACK_IMAGES: Record<string, string[]> = {
@@ -81,8 +82,9 @@ export function ListingCard({ listing, index }: { listing: ExtractedListing; ind
         "
         style={{ animationDelay: `${index * 0.06}s`, opacity: 0 }}
       >
-        {/* Match score badge */}
-        <div className="absolute top-3 right-3 z-10">
+        {/* Top-right: Match badge + CRM button */}
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+          <AddToCrmButton listing={listing} />
           <div
             className={`
             flex items-center gap-1.5 px-3 py-1.5 rounded-full backdrop-blur-md text-xs font-medium
