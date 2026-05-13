@@ -219,93 +219,124 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: "DB not configured" }, { status: 500 });
   }
 
-  // Pick targets for this run — 3 locations per hour
-  // Use current hour as seed so we cycle through all targets over ~18 hours
+  // Batch size — default 8 per hour, overridable via ?count=N (max 20)
+  const countParam = parseInt(req.nextUrl.searchParams.get("count") || "8");
+  const batchSize = Math.min(Math.max(1, countParam), 20);
+
+  // startAt: explicit index override (for manual seeding), else use hour-rotation
+  const startAtParam = req.nextUrl.searchParams.get("startAt");
   const hour = new Date().getUTCHours();
-  const startIdx = (hour * 3) % SCRAPE_QUEUE.length;
-  const targets = [
-    SCRAPE_QUEUE[startIdx],
-    SCRAPE_QUEUE[(startIdx + 1) % SCRAPE_QUEUE.length],
-    SCRAPE_QUEUE[(startIdx + 2) % SCRAPE_QUEUE.length],
-  ];
+  const startIdx =
+    startAtParam !== null
+      ? Math.max(0, parseInt(startAtParam)) % SCRAPE_QUEUE.length
+      : (hour * batchSize) % SCRAPE_QUEUE.length;
+
+  const targets: ScrapeTarget[] = [];
+  for (let i = 0; i < batchSize; i++) {
+    targets.push(SCRAPE_QUEUE[(startIdx + i) % SCRAPE_QUEUE.length]);
+  }
 
   const results: Array<{ target: ScrapeTarget; scraped: number; inserted: number; error?: string }> = [];
 
-  for (const target of targets) {
-    try {
-      const listings = await scrapeAllPlatforms(
-        `${target.location} ${target.country}`,
-        target.boatType
-      );
+  // Scrape all targets in parallel (4 concurrent — avoid rate-limiting platforms)
+  const CONCURRENCY = 4;
+  const targetBatches: ScrapeTarget[][] = [];
+  for (let i = 0; i < targets.length; i += CONCURRENCY) {
+    targetBatches.push(targets.slice(i, i + CONCURRENCY));
+  }
 
-      if (listings.length === 0) {
-        results.push({ target, scraped: 0, inserted: 0 });
-        continue;
+  for (const batch of targetBatches) {
+    const batchResults = await Promise.allSettled(
+      batch.map((target) => processTarget(target, db))
+    );
+    for (let i = 0; i < batch.length; i++) {
+      const target = batch[i];
+      const r = batchResults[i];
+      if (r.status === "fulfilled") {
+        results.push({ target, ...r.value });
+      } else {
+        results.push({ target, scraped: 0, inserted: 0, error: String(r.reason) });
       }
-
-      // Group by source domain → get/create company → insert boats
-      let inserted = 0;
-      const companyCache = new Map<string, string>();
-
-      for (const listing of listings) {
-        let domain = "";
-        try {
-          domain = new URL(listing.source_url).hostname.replace("www.", "");
-        } catch {
-          continue;
-        }
-        if (!domain || !listing.name) continue;
-
-        // Only insert boats with non-category detail URLs
-        try {
-          const path = new URL(listing.source_url).pathname;
-          const segments = path.split("/").filter(Boolean);
-          if (segments.length < 2) continue;
-          if (/\/(search|results|fleet|browse|category)\/?$/i.test(path)) continue;
-        } catch {
-          continue;
-        }
-
-        let companyId = companyCache.get(domain);
-        if (!companyId) {
-          const id = await getOrCreateScrapeCompany(db, domain);
-          if (!id) continue;
-          companyId = id;
-          companyCache.set(domain, id);
-        }
-
-        const boat = listingToBoat(listing, target, companyId);
-        const { error } = await db
-          .from("charter_boats")
-          .upsert(boat, { onConflict: "company_id,name,boat_type", ignoreDuplicates: false });
-
-        if (!error) inserted++;
-      }
-
-      results.push({ target, scraped: listings.length, inserted });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      results.push({ target, scraped: 0, inserted: 0, error: message });
     }
   }
 
   const totalInserted = results.reduce((s, r) => s + r.inserted, 0);
   const totalScraped = results.reduce((s, r) => s + r.scraped, 0);
 
-  // Log to DB for monitoring
+  // Log to DB
   await db.from("scrape_log").insert({
     targets: targets.map((t) => `${t.location}, ${t.country}`),
     scraped: totalScraped,
     inserted: totalInserted,
     results,
-  }).select().single().then(() => {}, () => {}); // ignore errors
+  }).select().single().then(() => {}, () => {});
 
   return Response.json({
     ok: true,
+    batchSize,
+    startIdx,
     hour,
     targets: targets.map((t) => `${t.location}, ${t.country}`),
     totalScraped,
     totalInserted,
     results,
   });
+}
+
+/** Process a single scrape target — scrape + dedupe + upsert */
+async function processTarget(
+  target: ScrapeTarget,
+  db: SupabaseClient
+): Promise<{ scraped: number; inserted: number; error?: string }> {
+  try {
+    const listings = await scrapeAllPlatforms(
+      `${target.location} ${target.country}`,
+      target.boatType
+    );
+
+    if (listings.length === 0) return { scraped: 0, inserted: 0 };
+
+    let inserted = 0;
+    const companyCache = new Map<string, string>();
+
+    for (const listing of listings) {
+      let domain = "";
+      try {
+        domain = new URL(listing.source_url).hostname.replace("www.", "");
+      } catch {
+        continue;
+      }
+      if (!domain || !listing.name) continue;
+
+      // Only insert boats with non-category detail URLs
+      try {
+        const path = new URL(listing.source_url).pathname;
+        const segments = path.split("/").filter(Boolean);
+        if (segments.length < 2) continue;
+        if (/\/(search|results|fleet|browse|category)\/?$/i.test(path)) continue;
+      } catch {
+        continue;
+      }
+
+      let companyId = companyCache.get(domain);
+      if (!companyId) {
+        const id = await getOrCreateScrapeCompany(db, domain);
+        if (!id) continue;
+        companyId = id;
+        companyCache.set(domain, id);
+      }
+
+      const boat = listingToBoat(listing, target, companyId);
+      const { error } = await db
+        .from("charter_boats")
+        .upsert(boat, { onConflict: "company_id,name,boat_type", ignoreDuplicates: false });
+
+      if (!error) inserted++;
+    }
+
+    return { scraped: listings.length, inserted };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { scraped: 0, inserted: 0, error: message };
+  }
 }
