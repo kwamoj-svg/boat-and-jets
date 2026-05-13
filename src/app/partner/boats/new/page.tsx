@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createPartnerBoat } from "@/app/actions/partner";
 import { Ship, Save } from "lucide-react";
+import { BoatImageUploader } from "@/components/BoatImageUploader";
 
 export default function NewBoatPage() {
   const [error, setError] = useState<string | null>(null);
@@ -252,20 +253,7 @@ export default function NewBoatPage() {
         {/* Images */}
         <section className="bg-navy-light/50 backdrop-blur-md border border-white/10 rounded-xl p-6">
           <h2 className="text-lg font-medium text-white mb-4">Bilder</h2>
-          <div>
-            <label className={labelClass}>
-              Bild-URLs (eine pro Zeile)
-            </label>
-            <textarea
-              name="images"
-              rows={3}
-              className={`${inputClass} resize-none`}
-              placeholder={"https://example.com/boat1.jpg\nhttps://example.com/boat2.jpg"}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Datei-Upload kommt bald. Gib vorerst Bild-URLs ein.
-            </p>
-          </div>
+          <BoatImageUploader name="images_json" maxImages={10} folderPath="partner-boats" />
         </section>
 
         {/* Contact */}

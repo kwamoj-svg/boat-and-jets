@@ -140,13 +140,23 @@ export async function createPartnerBoat(formData: FormData) {
 
   const featuresRaw = formData.get("features") as string;
   const imagesRaw = formData.get("images") as string;
+  const imagesJson = formData.get("images_json") as string;
 
   const features = featuresRaw
     ? featuresRaw.split(",").map((f) => f.trim()).filter(Boolean)
     : [];
-  const images = imagesRaw
-    ? imagesRaw.split("\n").map((u) => u.trim()).filter(Boolean)
-    : [];
+
+  // Prefer JSON array from uploader; fall back to legacy newline-separated URLs
+  let images: string[] = [];
+  if (imagesJson) {
+    try {
+      const parsed = JSON.parse(imagesJson);
+      if (Array.isArray(parsed)) images = parsed.filter((u) => typeof u === "string");
+    } catch { /* ignore */ }
+  }
+  if (images.length === 0 && imagesRaw) {
+    images = imagesRaw.split("\n").map((u) => u.trim()).filter(Boolean);
+  }
 
   const yearVal = formData.get("year") as string;
   const lengthVal = formData.get("length_ft") as string;
@@ -213,13 +223,23 @@ export async function updatePartnerBoat(id: string, formData: FormData) {
 
   const featuresRaw = formData.get("features") as string;
   const imagesRaw = formData.get("images") as string;
+  const imagesJson = formData.get("images_json") as string;
 
   const features = featuresRaw
     ? featuresRaw.split(",").map((f) => f.trim()).filter(Boolean)
     : [];
-  const images = imagesRaw
-    ? imagesRaw.split("\n").map((u) => u.trim()).filter(Boolean)
-    : [];
+
+  // Prefer JSON array from uploader; fall back to legacy newline-separated URLs
+  let images: string[] = [];
+  if (imagesJson) {
+    try {
+      const parsed = JSON.parse(imagesJson);
+      if (Array.isArray(parsed)) images = parsed.filter((u) => typeof u === "string");
+    } catch { /* ignore */ }
+  }
+  if (images.length === 0 && imagesRaw) {
+    images = imagesRaw.split("\n").map((u) => u.trim()).filter(Boolean);
+  }
 
   const yearVal = formData.get("year") as string;
   const lengthVal = formData.get("length_ft") as string;
