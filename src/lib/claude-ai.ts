@@ -77,10 +77,31 @@ function fallbackParse(raw: string): ParsedUserQuery {
   // Detect budget
   let budget_per_day: number | undefined;
   let budget_max: number | undefined;
+  // "300€ pro tag", "300 per day", "300€/tag"
   const budgetMatch = lower.match(/(\d+)\s*€?\s*(pro\s*tag|per\s*day|\/tag|\/day)/);
   if (budgetMatch) budget_per_day = Number(budgetMatch[1]);
+  // "300€ pro woche", "300 per week"
   const weekMatch = lower.match(/(\d+)\s*€?\s*(pro\s*woche|per\s*week|\/woche|\/week)/);
   if (weekMatch) budget_max = Number(weekMatch[1]);
+  // "max 300€", "bis 300€", "unter 300€", "under 300", "budget 300"
+  if (!budget_per_day && !budget_max) {
+    const maxMatch = lower.match(/(?:max\.?|bis|unter|under|budget|up\s*to)\s*(\d+)\s*€?/);
+    if (maxMatch) {
+      const val = Number(maxMatch[1]);
+      // Values under 2000 are likely per-day, above that per-week or sale
+      if (val <= 2000) budget_per_day = val;
+      else budget_max = val;
+    }
+    // "300€ max", "500€ budget" (number before keyword)
+    if (!budget_per_day && !budget_max) {
+      const reverseMatch = lower.match(/(\d+)\s*€\s*(?:max\.?|budget|limit)/);
+      if (reverseMatch) {
+        const val = Number(reverseMatch[1]);
+        if (val <= 2000) budget_per_day = val;
+        else budget_max = val;
+      }
+    }
+  }
   if (budget_per_day && !budget_max) budget_max = budget_per_day * 7;
 
   // Detect guests
