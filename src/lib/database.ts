@@ -384,13 +384,27 @@ export async function searchCharterBoats(opts: {
       query = query.lte("price_per_day", opts.budgetPerDay * 1.3);
     }
 
-    // Text search across name/brand/model/port/description when free-text query provided
-    if (opts.query && opts.query.trim().length > 0) {
+    // Free-text search — only apply if no structured filters already matched
+    // (otherwise it over-restricts: "Segelboot Kroatien" already filters by
+    // boat_type=sailboat AND country=Croatia, no need to also require those
+    // words in name/brand/etc.)
+    const hasStructuredFilters = !!(
+      opts.boatType || opts.country || opts.region || opts.city || opts.guests
+    );
+
+    if (!hasStructuredFilters && opts.query && opts.query.trim().length > 0) {
+      const STOP_WORDS = new Set([
+        "boot", "boat", "yacht", "charter", "mieten", "rental", "hire", "book",
+        "segelboot", "motorboot", "katamaran", "sailing", "sailboat", "motorboat", "catamaran",
+        "kroatien", "croatia", "spanien", "spain", "griechenland", "greece", "italien", "italy",
+        "frankreich", "france", "türkei", "tuerkei", "turkey", "max", "bis", "unter", "under",
+        "pro", "per", "tag", "day", "woche", "week", "der", "die", "das", "ein", "eine",
+      ]);
       const words = opts.query
         .toLowerCase()
         .split(/\s+/)
-        .filter((w) => w.length > 2)
-        .filter((w) => !/^(boot|boat|yacht|charter|mieten|rental|hire|book)$/.test(w));
+        .map((w) => w.replace(/[^\wäöüß]/g, ""))
+        .filter((w) => w.length > 2 && !STOP_WORDS.has(w) && !/^\d+$/.test(w));
 
       if (words.length > 0) {
         const orConditions = words
