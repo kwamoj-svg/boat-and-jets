@@ -69,6 +69,8 @@ interface BoatDetail {
   license_required: boolean;
   pets_allowed: boolean;
   smoking_allowed: boolean;
+  detail_url: string | null;
+  source: string | null;
   charter_companies: BoatCompany | null;
 }
 
@@ -272,11 +274,23 @@ export default function BoatDetailPage() {
                 <div className="text-xs text-gray-500">pro Tag</div>
               </div>
             )}
+            {boat.detail_url && (
+              <a
+                href={boat.detail_url}
+                target="_blank"
+                rel="noopener noreferrer sponsored"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-gold to-gold-light text-navy text-sm font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-gold/20"
+              >
+                <Calendar className="w-4 h-4" />
+                Jetzt buchen
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
             <AddToCrmButton
               variant="full"
               listing={{
                 name: boat.name,
-                source_url: `https://veliqa.life/charter/${boat.slug}`,
+                source_url: boat.detail_url || `https://veliqa.life/charter/${boat.slug}`,
                 image_url: boat.images?.[0] || null,
                 type: boat.boat_type,
                 brand: boat.brand,
@@ -483,10 +497,35 @@ export default function BoatDetailPage() {
 
                 <Link
                   href={`/charter/company/${company.slug}`}
-                  className="mt-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-gold to-gold-light text-navy text-sm font-medium hover:opacity-90 transition-opacity w-full"
+                  className="mt-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-gray-300 text-sm hover:bg-white/10 transition-colors w-full"
                 >
                   Alle Boote ansehen
                 </Link>
+              </div>
+            )}
+
+            {/* Booking CTA — sticky bottom on mobile */}
+            {boat.detail_url && (
+              <div className="glass rounded-2xl p-5 border border-gold/20 bg-gold/5">
+                <h3 className="text-white font-medium mb-1">Boot buchen</h3>
+                <p className="text-xs text-gray-400 mb-3">
+                  Buchung erfolgt direkt beim Anbieter — sichere Zahlung, sofortige Bestätigung.
+                </p>
+                <a
+                  href={boat.detail_url}
+                  target="_blank"
+                  rel="noopener noreferrer sponsored"
+                  className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-gold to-gold-light text-navy font-semibold text-sm hover:opacity-90 transition-opacity w-full"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Jetzt buchen bei {boat.source === "samboat_sitemap" ? "Samboat" : (() => { try { return new URL(boat.detail_url!).hostname.replace("www.", "").split(".")[0]; } catch { return "Anbieter"; } })()}
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                {boat.source === "samboat_sitemap" && (
+                  <p className="text-[10px] text-gray-500 mt-2 text-center">
+                    Affiliate-Partner — VELIQA erhält ggf. eine Provision
+                  </p>
+                )}
               </div>
             )}
           </div>

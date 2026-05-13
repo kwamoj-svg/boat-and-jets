@@ -6,7 +6,7 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import {
   Anchor, Ship, MapPin, Users, Ruler, Search, Filter,
-  ChevronLeft, ChevronRight, Bed, SlidersHorizontal,
+  ChevronLeft, ChevronRight, Bed, SlidersHorizontal, ExternalLink,
 } from "lucide-react";
 
 /* ─── Types ─── */
@@ -36,6 +36,8 @@ interface CharterBoat {
   images: string[];
   charter_type: string;
   license_required: boolean;
+  detail_url: string | null;
+  source: string | null;
   charter_companies: CharterCompany | null;
 }
 
@@ -207,12 +209,33 @@ function BoatCard({ boat }: { boat: CharterBoat }) {
               </Link>
             )}
           </div>
-          <Link
-            href={`/charter/${boat.slug}`}
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-gold to-gold-light text-navy text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            Details
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/charter/${boat.slug}`}
+              className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-gray-300 text-xs font-medium hover:bg-white/10 transition-colors"
+            >
+              Details
+            </Link>
+            {boat.detail_url ? (
+              <a
+                href={boat.detail_url}
+                target="_blank"
+                rel="noopener noreferrer sponsored"
+                onClick={(e) => e.stopPropagation()}
+                className="px-3 py-2 rounded-lg bg-gradient-to-r from-gold to-gold-light text-navy text-xs font-semibold hover:opacity-90 transition-opacity inline-flex items-center gap-1"
+              >
+                Buchen
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            ) : (
+              <Link
+                href={`/charter/${boat.slug}`}
+                className="px-3 py-2 rounded-lg bg-gradient-to-r from-gold to-gold-light text-navy text-xs font-semibold hover:opacity-90 transition-opacity"
+              >
+                Anfragen
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </div>
