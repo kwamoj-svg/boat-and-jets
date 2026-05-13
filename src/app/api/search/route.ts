@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { parseUserQuery } from "@/lib/claude-ai";
 import { searchCharterBoats, searchCharterCompanies } from "@/lib/database";
+import { searchSaleBoats } from "@/lib/sale-boats-search";
 
 export const maxDuration = 30;
 
@@ -36,8 +37,16 @@ export async function GET(req: NextRequest) {
 
         send("stage", { stage: "database", message: "Durchsuche Bootskatalog..." });
 
-        // Search both boats AND companies in parallel
-        const [boats, companies] = await Promise.all([
+        // Detect buy/charter intent — buy intent comes from AI parse OR
+        // from common German/English keywords in the raw query
+        const rawLower = q.toLowerCase();
+        const isBuy =
+          parsed.intent === "buy" ||
+          /\b(kauf|kaufen|verkauf|sell|sale|for sale|gebraucht|zu verkaufen)\b/.test(rawLower);
+
+        // Search all three sources in parallel — charter boats, sale boats,
+        // and charter companies (only if charter intent)
+        const [boats, saleBoats, companies] = await Promise.all([
           searchCharterBoats({
             query: q,
             country: parsed.country || undefined,
@@ -46,29 +55,41 @@ export async function GET(req: NextRequest) {
             boatType: parsed.boat_type || undefined,
             guests: parsed.guests || undefined,
             budgetPerDay: parsed.budget_per_day || undefined,
-            limit: 40,
+            limit: isBuy ? 10 : 40,
           }),
-          searchCharterCompanies({
+          searchSaleBoats({
             query: q,
             country: parsed.country || undefined,
             region: parsed.region || undefined,
             city: parsed.city || undefined,
             boatType: parsed.boat_type || undefined,
-            limit: 30,
+            maxPrice: parsed.budget_max || undefined,
+            limit: isBuy ? 40 : 10,
           }),
+          isBuy
+            ? Promise.resolve([])
+            : searchCharterCompanies({
+                query: q,
+                country: parsed.country || undefined,
+                region: parsed.region || undefined,
+                city: parsed.city || undefined,
+                boatType: parsed.boat_type || undefined,
+                limit: 30,
+              }),
         ]);
 
-        // Merge: boats first (more specific), then companies
-        const results = [...boats, ...companies];
+        // Order: buy → sale boats first, charter → charter boats first.
+        // Companies last (broader, less specific).
+        const results = isBuy
+          ? [...saleBoats, ...boats, ...companies]
+          : [...boats, ...saleBoats, ...companies];
 
         if (results.length > 0) {
-          const breakdown =
-            boats.length > 0 && companies.length > 0
-              ? `${boats.length} Boote + ${companies.length} Charter-Anbieter`
-              : boats.length > 0
-              ? `${boats.length} Boote im Katalog gefunden`
-              : `${companies.length} Charter-Anbieter gefunden`;
-          send("stage", { stage: "results", message: breakdown });
+          const parts: string[] = [];
+          if (boats.length) parts.push(`${boats.length} Charter-Boote`);
+          if (saleBoats.length) parts.push(`${saleBoats.length} Verkaufsboote`);
+          if (companies.length) parts.push(`${companies.length} Anbieter`);
+          send("stage", { stage: "results", message: parts.join(" + ") });
           for (const item of results) {
             send("listing", item);
           }
@@ -84,7 +105,9 @@ export async function GET(req: NextRequest) {
           total_found: results.length,
           displayed: results.length,
           boats: boats.length,
+          sale_boats: saleBoats.length,
           companies: companies.length,
+          intent: isBuy ? "buy" : "charter",
           source: "database",
           search_id: crypto.randomUUID(),
         });

@@ -273,6 +273,7 @@ export default function BoatDetailPage() {
               </div>
             )}
             <AddToCrmButton
+              variant="full"
               listing={{
                 name: boat.name,
                 source_url: `https://veliqa.life/charter/${boat.slug}`,
