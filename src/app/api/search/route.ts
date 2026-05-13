@@ -15,6 +15,7 @@ import {
   saveBoats,
   findCachedBoats,
   bulkFindDetailUrls,
+  searchCharterBoats,
 } from "@/lib/database";
 import { upgradeAllUrls } from "@/lib/platform-urls";
 import { detectExperience, applyExperienceFilters } from "@/lib/experience-search";
@@ -264,6 +265,32 @@ export async function GET(req: NextRequest) {
         const experience = detectExperience(q);
 
         const locationQuery = [fastParsed.city, fastParsed.country, fastParsed.region].filter(Boolean).join(" ");
+
+        // ═══════════════════════════════════════════════════════════
+        // INSTANT: Stream charter_boats from Supabase (< 500ms)
+        // ═══════════════════════════════════════════════════════════
+        send("stage", { stage: "database", message: "Lade Boote aus Datenbank..." });
+        let instantBoats: ExtractedListing[] = [];
+        try {
+          instantBoats = await searchCharterBoats({
+            country: fastParsed.country || undefined,
+            region: fastParsed.region || undefined,
+            city: fastParsed.city || undefined,
+            boatType: fastParsed.boat_type || undefined,
+            guests: fastParsed.guests || undefined,
+            budgetPerDay: fastParsed.budget_per_day || undefined,
+            limit: 20,
+          });
+          // Stream instant results immediately
+          if (instantBoats.length > 0) {
+            for (const boat of instantBoats) {
+              send("listing", boat);
+            }
+            send("stage", { stage: "instant", message: `${instantBoats.length} Boote sofort gefunden — suche weitere...` });
+          }
+        } catch {
+          // Non-critical, continue with scraping
+        }
 
         send("stage", { stage: "searching", message: "Durchsuche 50+ Plattformen..." });
 

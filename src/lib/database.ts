@@ -8,8 +8,8 @@ let _unavailable = false;
 function getClient(): SupabaseClient | null {
   if (_unavailable) return null;
   if (_client) return _client;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY;
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) {
     _unavailable = true;
     console.log("[DB] Supabase not configured — running without cache");
@@ -321,4 +321,104 @@ export async function bulkFindDetailUrls(
   }
 
   return result;
+}
+
+/* ─────────────────────────────────────────────
+   CHARTER DB: Instant search against Supabase charter_boats
+   Returns results formatted as ExtractedListing for the search page
+   ───────────────────────────────────────────── */
+
+export async function searchCharterBoats(opts: {
+  query?: string;
+  country?: string;
+  region?: string;
+  city?: string;
+  boatType?: string;
+  guests?: number;
+  budgetPerDay?: number;
+  limit?: number;
+}): Promise<ExtractedListing[]> {
+  const db = getClient();
+  if (!db) return [];
+
+  try {
+    let query = db
+      .from("charter_boats")
+      .select("*, charter_companies(company_name, slug, country, city, website, email, phone)")
+      .eq("status", "active")
+      .order("price_per_day", { ascending: true, nullsFirst: false })
+      .limit(opts.limit || 30);
+
+    if (opts.boatType) {
+      // Map common types
+      const typeMap: Record<string, string[]> = {
+        motor: ["motorboat", "yacht", "speedboat"],
+        sailing: ["sailboat"],
+        catamaran: ["catamaran"],
+        gulet: ["gulet"],
+        yacht: ["yacht", "motorboat"],
+        motorboot: ["motorboat", "yacht", "speedboat"],
+        segelboot: ["sailboat"],
+        katamaran: ["catamaran"],
+      };
+      const types = typeMap[opts.boatType.toLowerCase()] || [opts.boatType.toLowerCase()];
+      if (types.length === 1) {
+        query = query.eq("boat_type", types[0]);
+      } else {
+        query = query.in("boat_type", types);
+      }
+    }
+
+    if (opts.country) {
+      query = query.ilike("country", `%${opts.country}%`);
+    }
+    if (opts.region) {
+      query = query.ilike("region", `%${opts.region}%`);
+    }
+    if (opts.guests) {
+      query = query.gte("max_guests", opts.guests);
+    }
+    if (opts.budgetPerDay) {
+      query = query.lte("price_per_day", opts.budgetPerDay * 1.3);
+    }
+
+    const { data, error } = await query;
+    if (error || !data) return [];
+
+    // Convert to ExtractedListing format
+    return data.map((boat: Record<string, unknown>) => {
+      const company = boat.charter_companies as Record<string, unknown> | null;
+      const companyName = company ? String(company.company_name || "") : "";
+      const companyWebsite = company ? String(company.website || "") : "";
+
+      return {
+        name: `${String(boat.brand || "")} ${String(boat.model || String(boat.name || ""))}`.trim() || String(boat.name),
+        type: String(boat.boat_type || "motorboat"),
+        length_ft: boat.length_m ? Math.round(Number(boat.length_m) * 3.281) : null,
+        cabins: boat.cabins ? Number(boat.cabins) : null,
+        guests: boat.max_guests ? Number(boat.max_guests) : null,
+        crew: boat.crew_size ? Number(boat.crew_size) : null,
+        year: boat.year ? Number(boat.year) : null,
+        price_per_day: boat.price_per_day ? Number(boat.price_per_day) : null,
+        price_per_week: boat.price_per_week ? Number(boat.price_per_week) : null,
+        sale_price: null,
+        currency: String(boat.currency || "EUR"),
+        location: [boat.base_port, boat.country].filter(Boolean).join(", "),
+        source_url: companyWebsite || `https://veliqa.life/charter/${boat.slug}`,
+        image_url: null,
+        description: String(boat.description || ""),
+        features: Array.isArray(boat.features) ? boat.features.map(String) : [],
+        ai_summary: `${companyName} — ${String(boat.charter_type || "bareboat")} charter in ${[boat.base_port, boat.country].filter(Boolean).join(", ")}`,
+        match_score: 0.85,
+        match_reasons: ["Aus VELIQA Datenbank", companyName].filter(Boolean),
+        luxury_level: boat.price_per_day && Number(boat.price_per_day) > 1000 ? 4 : boat.price_per_day && Number(boat.price_per_day) > 500 ? 3 : 2,
+        verified: true,
+        region: String(boat.region || ""),
+        country: String(boat.country || ""),
+        source_title: companyName || String(boat.name || ""),
+      } as unknown as ExtractedListing;
+    });
+  } catch {
+    return [];
+  }
 }
