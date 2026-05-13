@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect, useCallback, useState } from "react";
+import React, { useRef, useEffect, useState } from "react";
 
 /* ── Destination coordinates (lon, lat) ── */
 const DESTINATIONS: { name: string; lon: number; lat: number }[] = [
@@ -106,6 +106,26 @@ function ortho(
   return { x, y, visible: cosc > 0 };
 }
 
+/* ── Module-level polygon cache to avoid refetching ── */
+let cachedPolygons: number[][][][] | null = null;
+let fetchPromise: Promise<number[][][][]> | null = null;
+
+function fetchPolygons(): Promise<number[][][][]> {
+  if (cachedPolygons) return Promise.resolve(cachedPolygons);
+  if (fetchPromise) return fetchPromise;
+  fetchPromise = fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json")
+    .then((r) => r.json())
+    .then((topo: TopoJSON) => {
+      cachedPolygons = getPolygons(topo);
+      return cachedPolygons;
+    })
+    .catch(() => {
+      fetchPromise = null; // allow retry on next mount
+      return [];
+    });
+  return fetchPromise;
+}
+
 /* ── Component ── */
 interface GlobeCanvasProps {
   highlightDestination?: string | null;
@@ -114,50 +134,89 @@ interface GlobeCanvasProps {
 
 export function GlobeCanvas({ highlightDestination, size = 420 }: GlobeCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [polygons, setPolygons] = useState<number[][][][]>([]);
-  const animRef = useRef<number>(0);
-  const rotRef = useRef<number>(-20);
-  const targetRotRef = useRef<number | null>(null);
-  const timeRef = useRef<number>(0);
+  const [polygons, setPolygons] = useState<number[][][][]>(cachedPolygons || []);
 
-  // Fetch world data
-  useEffect(() => {
-    fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json")
-      .then((r) => r.json())
-      .then((topo: TopoJSON) => setPolygons(getPolygons(topo)))
-      .catch(() => {});
-  }, []);
+  // Store mutable state in refs so the animation loop doesn't need to restart
+  const stateRef = useRef({
+    polygons: polygons,
+    highlight: highlightDestination || null,
+    rot: -20,
+    targetRot: null as number | null,
+  });
 
-  // Set target rotation when destination selected
+  // Keep refs in sync with props (no effect restarts needed)
+  stateRef.current.polygons = polygons;
+  stateRef.current.highlight = highlightDestination || null;
+
+  // Update target rotation when destination changes
   useEffect(() => {
     if (highlightDestination) {
       const dest = DESTINATIONS.find((d) => d.name === highlightDestination);
-      if (dest) targetRotRef.current = dest.lon;
+      if (dest) stateRef.current.targetRot = dest.lon;
     } else {
-      targetRotRef.current = null;
+      stateRef.current.targetRot = null;
     }
   }, [highlightDestination]);
 
-  const draw = useCallback(
-    (ctx: CanvasRenderingContext2D, w: number, h: number, t: number) => {
-      const dpr = window.devicePixelRatio || 1;
-      const cx = w / 2;
-      const cy = h / 2;
+  // Fetch world data (cached at module level)
+  useEffect(() => {
+    if (cachedPolygons) {
+      setPolygons(cachedPolygons);
+      return;
+    }
+    let cancelled = false;
+    fetchPolygons().then((p) => {
+      if (!cancelled && p.length > 0) setPolygons(p);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Single stable animation loop — only restarts if `size` changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = `${size}px`;
+    canvas.style.height = `${size}px`;
+
+    let running = true;
+    let lastFrame = 0;
+    const TARGET_FPS = 30; // 30fps is plenty for a slowly rotating globe
+    const FRAME_INTERVAL = 1000 / TARGET_FPS;
+
+    const loop = (t: number) => {
+      if (!running) return;
+
+      // Throttle to ~30fps
+      const delta = t - lastFrame;
+      if (delta < FRAME_INTERVAL) {
+        requestAnimationFrame(loop);
+        return;
+      }
+      lastFrame = t - (delta % FRAME_INTERVAL);
+
+      const s = stateRef.current;
+      const cx = size / 2;
+      const cy = size / 2;
       const r = Math.min(cx, cy) * 0.88;
       const rotLat = 15;
 
-      // Rotation
-      if (targetRotRef.current !== null) {
-        // Ease toward target
-        const diff = targetRotRef.current - rotRef.current;
+      // Smooth rotation
+      if (s.targetRot !== null) {
+        const diff = s.targetRot - s.rot;
         const shortDiff = ((diff + 540) % 360) - 180;
-        rotRef.current += shortDiff * 0.04;
+        s.rot += shortDiff * 0.04;
       } else {
-        rotRef.current += 0.12;
+        s.rot += 0.08; // slightly slower idle rotation
       }
-      const rotLon = rotRef.current;
+      const rotLon = s.rot;
 
-      ctx.clearRect(0, 0, w * dpr, h * dpr);
+      ctx.clearRect(0, 0, size * dpr, size * dpr);
       ctx.save();
       ctx.scale(dpr, dpr);
 
@@ -167,7 +226,7 @@ export function GlobeCanvas({ highlightDestination, size = 420 }: GlobeCanvasPro
       atmoGrad.addColorStop(0.5, "rgba(200, 165, 90, 0.03)");
       atmoGrad.addColorStop(1, "transparent");
       ctx.fillStyle = atmoGrad;
-      ctx.fillRect(0, 0, w, h);
+      ctx.fillRect(0, 0, size, size);
 
       // Ocean sphere
       ctx.beginPath();
@@ -198,7 +257,7 @@ export function GlobeCanvas({ highlightDestination, size = 420 }: GlobeCanvasPro
       for (let lat = -80; lat <= 80; lat += 20) {
         ctx.beginPath();
         let started = false;
-        for (let lon = -180; lon <= 180; lon += 2) {
+        for (let lon = -180; lon <= 180; lon += 3) {
           const p = ortho(lon, lat, cx, cy, r, rotLon, rotLat);
           if (p.visible) {
             if (!started) { ctx.moveTo(p.x, p.y); started = true; }
@@ -210,7 +269,7 @@ export function GlobeCanvas({ highlightDestination, size = 420 }: GlobeCanvasPro
       for (let lon = -180; lon < 180; lon += 30) {
         ctx.beginPath();
         let started = false;
-        for (let lat = -90; lat <= 90; lat += 2) {
+        for (let lat = -90; lat <= 90; lat += 3) {
           const p = ortho(lon, lat, cx, cy, r, rotLon, rotLat);
           if (p.visible) {
             if (!started) { ctx.moveTo(p.x, p.y); started = true; }
@@ -221,7 +280,7 @@ export function GlobeCanvas({ highlightDestination, size = 420 }: GlobeCanvasPro
       }
 
       // Draw land polygons
-      for (const poly of polygons) {
+      for (const poly of s.polygons) {
         for (const ring of poly) {
           ctx.beginPath();
           let lastVisible = false;
@@ -254,7 +313,7 @@ export function GlobeCanvas({ highlightDestination, size = 420 }: GlobeCanvasPro
         const p = ortho(dest.lon, dest.lat, cx, cy, r, rotLon, rotLat);
         if (!p.visible) continue;
 
-        const isHighlighted = highlightDestination === dest.name;
+        const isHighlighted = s.highlight === dest.name;
 
         if (isHighlighted) {
           // Outer ring pulse
@@ -301,14 +360,14 @@ export function GlobeCanvas({ highlightDestination, size = 420 }: GlobeCanvasPro
           ctx.shadowBlur = 0;
         } else {
           // Small dot
-          const alpha = highlightDestination ? 0.2 : 0.5 + pulse * 0.2;
-          const dotR = highlightDestination ? 2 : 2.5 + pulse * 0.5;
+          const alpha = s.highlight ? 0.2 : 0.5 + pulse * 0.2;
+          const dotR = s.highlight ? 2 : 2.5 + pulse * 0.5;
           ctx.beginPath();
           ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2);
           ctx.fillStyle = `rgba(200, 165, 90, ${alpha})`;
           ctx.fill();
 
-          if (!highlightDestination) {
+          if (!s.highlight) {
             ctx.beginPath();
             ctx.arc(p.x, p.y, 5 + pulse * 3, 0, Math.PI * 2);
             ctx.strokeStyle = `rgba(200, 165, 90, ${0.1 + pulse * 0.05})`;
@@ -320,36 +379,13 @@ export function GlobeCanvas({ highlightDestination, size = 420 }: GlobeCanvasPro
 
       ctx.restore(); // clip
       ctx.restore(); // scale
-    },
-    [polygons, highlightDestination]
-  );
 
-  // Animation loop
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = size * dpr;
-    canvas.height = size * dpr;
-    canvas.style.width = `${size}px`;
-    canvas.style.height = `${size}px`;
-
-    let running = true;
-    const loop = (t: number) => {
-      if (!running) return;
-      timeRef.current = t;
-      draw(ctx, size, size, t);
-      animRef.current = requestAnimationFrame(loop);
+      requestAnimationFrame(loop);
     };
-    animRef.current = requestAnimationFrame(loop);
-    return () => {
-      running = false;
-      cancelAnimationFrame(animRef.current);
-    };
-  }, [size, draw]);
+
+    requestAnimationFrame(loop);
+    return () => { running = false; };
+  }, [size]); // Only restart loop if size changes
 
   return (
     <canvas
