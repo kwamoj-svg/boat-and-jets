@@ -552,8 +552,8 @@ export async function scrapeMasterYachting(location: string, boatType?: string):
 
   if (!slug) return { listings: [], platform: "master-yachting.de" };
 
-  // Fetch 3 pages in parallel for more results (~20 boats per page = ~60 total)
-  const pageUrls = [1, 2, 3].map(p => `https://www.master-yachting.de/de/boat-rental/${slug}/?page=${p}`);
+  // Fetch 2 pages in parallel (~20 boats per page = ~40 total, limits memory)
+  const pageUrls = [1, 2].map(p => `https://www.master-yachting.de/de/boat-rental/${slug}/?page=${p}`);
   const pageResults = await Promise.allSettled(
     pageUrls.map(url => fetchWithTimeout(url, 12000, { "HX-Request": "true" }))
   );
@@ -675,83 +675,109 @@ function cbLocationMatches(city: string, locLower: string): boolean {
   return false;
 }
 
-async function scrapeClickAndBoatSitemap(location: string, boatType?: string): Promise<ScraperResult> {
-  const locLower = location.toLowerCase().replace(/\s+/g, "-");
+/** Stream-parse a CB sitemap URL, extracting matches without loading full XML into memory */
+async function streamCBSitemap(
+  sitemapUrl: string,
+  locLower: string,
+  boatType: string | undefined,
+  listings: ExtractedListing[],
+  maxListings: number,
+): Promise<void> {
+  if (listings.length >= maxListings) return;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(sitemapUrl, {
+      signal: controller.signal,
+      headers: getHeaders(),
+    });
+    clearTimeout(timeout);
+    if (!res.ok || !res.body) return;
 
-  // Fetch BOTH German product sitemaps in parallel (50,000+ entries total)
-  const [xml0, xml1] = await Promise.allSettled([
-    fetchWithTimeout("https://www.clickandboat.com/sitemaps/1707/CAB/products-de_0.xml", 20000),
-    fetchWithTimeout("https://www.clickandboat.com/sitemaps/1707/CAB/products-de_1.xml", 20000),
-  ]);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-  const xmlTexts: string[] = [];
-  if (xml0.status === "fulfilled" && xml0.value) xmlTexts.push(xml0.value);
-  if (xml1.status === "fulfilled" && xml1.value) xmlTexts.push(xml1.value);
-  if (xmlTexts.length === 0) return { listings: [], platform: "clickandboat.com" };
+    while (listings.length < maxListings) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-  const listings: ExtractedListing[] = [];
+      // Process complete <url>...</url> blocks from buffer
+      let endIdx: number;
+      while ((endIdx = buffer.indexOf("</url>")) !== -1 && listings.length < maxListings) {
+        const block = buffer.slice(0, endIdx + 6);
+        buffer = buffer.slice(endIdx + 6);
 
-  for (const xml of xmlTexts) {
-    if (listings.length >= 50) break;
-    const blocks = xml.split("</url>");
+        const locMatch = block.match(/<loc><!\[CDATA\[(https:\/\/www\.clickandboat\.com\/de\/boot-mieten\/([^/]+)\/([^/]+)\/([^\]]+))\]\]><\/loc>/);
+        if (!locMatch) continue;
 
-    for (const block of blocks) {
-      if (listings.length >= 50) break;
-      const locMatch = block.match(/<loc><!\[CDATA\[(https:\/\/www\.clickandboat\.com\/de\/boot-mieten\/([^/]+)\/([^/]+)\/([^\]]+))\]\]><\/loc>/);
-      if (!locMatch) continue;
+        const [, fullUrl, city, typeSlug, nameSlug] = locMatch;
+        if (!cbLocationMatches(city, locLower)) continue;
 
-      const [, fullUrl, city, typeSlug, nameSlug] = locMatch;
-      if (!cbLocationMatches(city, locLower)) continue;
+        if (boatType) {
+          const stdType = typeSlug.includes("segel") ? "sailing" : typeSlug.includes("katamaran") ? "catamaran" : "motor";
+          if (stdType !== boatType && !typeSlug.includes(boatType)) continue;
+        }
 
-      if (boatType) {
-        const stdType = typeSlug.includes("segel") ? "sailing" : typeSlug.includes("katamaran") ? "catamaran" : "motor";
-        if (stdType !== boatType && !typeSlug.includes(boatType)) continue;
+        const imgMatch = block.match(/<image:loc>(https:\/\/[^<]+)<\/image:loc>/);
+        const imageUrl = imgMatch ? imgMatch[1] : undefined;
+        const cleanSlug = decodeURIComponent(nameSlug).replace(/-[a-z0-9]{4,8}$/, "");
+        const name = cleanSlug.split("-").map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+        const cityName = decodeURIComponent(city).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+        const type = typeSlug.includes("segel") ? "sailing" : typeSlug.includes("katamaran") ? "catamaran" : typeSlug.includes("schlauchboot") ? "speedboat" : "motor";
+        const parts = cleanSlug.split("-");
+        const brand = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : undefined;
+        const derivedCountry = CITY_TO_COUNTRY[city] || CITY_TO_COUNTRY[city.split("-")[0]] || "";
+
+        listings.push({
+          name, type, brand,
+          model: undefined, year: undefined, length_ft: undefined,
+          cabins: undefined, guests: undefined, crew: undefined,
+          price_per_week: undefined, price_per_day: undefined, sale_price: undefined,
+          currency: "EUR", region: "", country: derivedCountry, port: cityName,
+          features: [],
+          description: `${name} for charter in ${cityName} via Click&Boat.`,
+          source_url: fullUrl,
+          source_title: `Click&Boat — ${name}`,
+          luxury_level: 3, match_score: 0.8,
+          match_reasons: ["Direct platform listing", "Click&Boat", "Detail URL"],
+          ai_summary: `${name} — ${type} charter in ${cityName}.`,
+          image_url: imageUrl,
+        } as ExtractedListing);
       }
 
-      const imgMatch = block.match(/<image:loc>(https:\/\/[^<]+)<\/image:loc>/);
-      const imageUrl = imgMatch ? imgMatch[1] : undefined;
-
-      // Remove trailing hash IDs (e.g. "-x6g83", "-vj6bwp5", "-b995yjk")
-      const cleanSlug = decodeURIComponent(nameSlug).replace(/-[a-z0-9]{4,8}$/, "");
-      const name = cleanSlug.split("-").map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
-      const cityName = decodeURIComponent(city).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-      const type = typeSlug.includes("segel") ? "sailing" : typeSlug.includes("katamaran") ? "catamaran" : typeSlug.includes("schlauchboot") ? "speedboat" : "motor";
-      const parts = cleanSlug.split("-");
-      const brand = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : undefined;
-      const derivedCountry = CITY_TO_COUNTRY[city] || CITY_TO_COUNTRY[city.split("-")[0]] || "";
-
-      listings.push({
-        name,
-        type,
-        brand,
-        model: undefined,
-        year: undefined,
-        length_ft: undefined,
-        cabins: undefined,
-        guests: undefined,
-        crew: undefined,
-        price_per_week: undefined,
-        price_per_day: undefined,
-        sale_price: undefined,
-        currency: "EUR",
-        region: "",
-        country: derivedCountry,
-        port: cityName,
-        features: [],
-        description: `${name} for charter in ${cityName} via Click&Boat.`,
-        source_url: fullUrl,
-        source_title: `Click&Boat — ${name}`,
-        luxury_level: 3,
-        match_score: 0.8,
-        match_reasons: ["Direct platform listing", "Click&Boat", "Detail URL"],
-        ai_summary: `${name} — ${type} charter in ${cityName}.`,
-        image_url: imageUrl,
-      } as ExtractedListing);
+      // Safety: don't let buffer grow unbounded (keep last 2KB for partial blocks)
+      if (buffer.length > 50000 && !buffer.includes("<url>")) {
+        buffer = buffer.slice(-2000);
+      }
     }
+
+    // Cancel remaining download once we have enough
+    reader.cancel().catch(() => {});
+  } catch {
+    clearTimeout(timeout);
+  }
+}
+
+async function scrapeClickAndBoatSitemap(location: string, boatType?: string): Promise<ScraperResult> {
+  const locLower = location.toLowerCase().replace(/\s+/g, "-");
+  const listings: ExtractedListing[] = [];
+
+  // Stream-parse sitemaps sequentially to limit memory (stop early once we have 40 matches)
+  await streamCBSitemap(
+    "https://www.clickandboat.com/sitemaps/1707/CAB/products-de_0.xml",
+    locLower, boatType, listings, 40,
+  );
+  if (listings.length < 40) {
+    await streamCBSitemap(
+      "https://www.clickandboat.com/sitemaps/1707/CAB/products-de_1.xml",
+      locLower, boatType, listings, 40,
+    );
   }
 
-  // Enrich first 25 with prices from detail pages (parallel, fast)
-  const enrichBatch = listings.slice(0, 25);
+  // Enrich first 15 with prices from detail pages (batched to limit memory)
+  const enrichBatch = listings.slice(0, 15);
   await Promise.allSettled(
     enrichBatch.map(async (b) => {
       try {
@@ -824,59 +850,95 @@ function sbTypeToStandard(t: string): string {
 
 async function scrapeSamboatSitemap(location: string, boatType?: string): Promise<ScraperResult> {
   const locLower = location.toLowerCase().replace(/\s+/g, "-");
-  const xml = await fetchWithTimeout("https://www.samboat.de/sitemap_de_product_listings.xml", 20000);
-  if (!xml) return { listings: [], platform: "samboat.de" };
-
   const listings: ExtractedListing[] = [];
-  const locPattern = /<loc>(https:\/\/www\.samboat\.de\/boot-mieten\/[^<]+)<\/loc>/g;
-  let m;
 
-  while ((m = locPattern.exec(xml)) !== null && listings.length < 40) {
-    const url = m[1];
-    const parts = url.replace("https://www.samboat.de/boot-mieten/", "").split("/");
-    if (parts.length < 3) continue;
+  // Stream-parse to avoid loading full sitemap into memory (can be 10MB+)
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch("https://www.samboat.de/sitemap_de_product_listings.xml", {
+      signal: controller.signal,
+      headers: getHeaders(),
+    });
+    clearTimeout(timeout);
+    if (!res.ok || !res.body) return { listings: [], platform: "samboat.de" };
 
-    const [city, typeSlug, id] = parts;
-    if (!sbLocationMatches(city, locLower)) continue;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const locRe = /<loc>(https:\/\/www\.samboat\.de\/boot-mieten\/[^<]+)<\/loc>/g;
 
-    const stdType = sbTypeToStandard(typeSlug);
-    if (boatType && stdType !== boatType && !typeSlug.includes(boatType)) continue;
+    while (listings.length < 35) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    const cityName = decodeURIComponent(city).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const typeName = decodeURIComponent(typeSlug).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const sbCountry = CITY_TO_COUNTRY[city] || CITY_TO_COUNTRY[city.split("-")[0]] || "";
+      // Extract all <loc> matches from current buffer
+      let m;
+      const newBuffer = buffer;
+      locRe.lastIndex = 0;
+      let lastMatchEnd = 0;
+      while ((m = locRe.exec(newBuffer)) !== null && listings.length < 35) {
+        lastMatchEnd = m.index + m[0].length;
+        const url = m[1];
+        const parts = url.replace("https://www.samboat.de/boot-mieten/", "").split("/");
+        if (parts.length < 3) continue;
 
-    listings.push({
-      name: `${typeName} ${cityName}`,
-      type: stdType,
-      brand: undefined,
-      model: undefined,
-      year: undefined,
-      length_ft: undefined,
-      cabins: undefined,
-      guests: undefined,
-      crew: undefined,
-      price_per_week: undefined,
-      price_per_day: undefined,
-      sale_price: undefined,
-      currency: "EUR",
-      region: "",
-      country: sbCountry,
-      port: cityName,
-      features: [],
-      description: `${typeName} for charter in ${cityName} via Samboat.`,
-      source_url: url,
-      source_title: `Samboat — ${typeName} in ${cityName}`,
-      luxury_level: 3,
-      match_score: 0.78,
-      match_reasons: ["Direct listing", "Samboat", "Verified detail URL"],
-      ai_summary: `${typeName} charter in ${cityName} via Samboat.`,
-      image_url: undefined,
-    } as ExtractedListing);
+        const [city, typeSlug] = parts;
+        if (!sbLocationMatches(city, locLower)) continue;
+
+        const stdType = sbTypeToStandard(typeSlug);
+        if (boatType && stdType !== boatType && !typeSlug.includes(boatType)) continue;
+
+        const cityName = decodeURIComponent(city).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+        const typeName = decodeURIComponent(typeSlug).replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+        const sbCountry = CITY_TO_COUNTRY[city] || CITY_TO_COUNTRY[city.split("-")[0]] || "";
+
+        listings.push({
+          name: `${typeName} ${cityName}`,
+          type: stdType,
+          brand: undefined,
+          model: undefined,
+          year: undefined,
+          length_ft: undefined,
+          cabins: undefined,
+          guests: undefined,
+          crew: undefined,
+          price_per_week: undefined,
+          price_per_day: undefined,
+          sale_price: undefined,
+          currency: "EUR",
+          region: "",
+          country: sbCountry,
+          port: cityName,
+          features: [],
+          description: `${typeName} for charter in ${cityName} via Samboat.`,
+          source_url: url,
+          source_title: `Samboat — ${typeName} in ${cityName}`,
+          luxury_level: 3,
+          match_score: 0.78,
+          match_reasons: ["Direct listing", "Samboat", "Verified detail URL"],
+          ai_summary: `${typeName} charter in ${cityName} via Samboat.`,
+          image_url: undefined,
+        } as ExtractedListing);
+      }
+
+      // Keep buffer manageable — discard processed part
+      if (lastMatchEnd > 0) {
+        buffer = buffer.slice(lastMatchEnd);
+      } else if (buffer.length > 50000) {
+        buffer = buffer.slice(-2000);
+      }
+    }
+
+    // Cancel remaining download
+    reader.cancel().catch(() => {});
+  } catch {
+    clearTimeout(timeout);
   }
 
-  // Enrich first 25 with names + images from detail pages (parallel, fast)
-  const enrichBatch = listings.slice(0, 25);
+  // Enrich first 15 with names + images + prices from detail pages
+  const enrichBatch = listings.slice(0, 15);
   const enrichResults = await Promise.allSettled(
     enrichBatch.map(async (b) => {
       const html = await fetchWithTimeout(b.source_url, 3500);
@@ -917,10 +979,16 @@ export async function scrapeAllPlatforms(
 ): Promise<ExtractedListing[]> {
   if (!location) return [];
 
-  const results = await Promise.allSettled([
-    scrapeMasterYachting(location, boatType),   // up to 60
-    scrapeClickAndBoatSitemap(location, boatType), // up to 50
-    scrapeSamboatSitemap(location, boatType),   // up to 40
+  // Batch 1: Heavy scrapers (sitemaps stream, MY fetches 3 pages)
+  // Run sequentially to limit peak memory on 512MB Render
+  const batch1 = await Promise.allSettled([
+    scrapeMasterYachting(location, boatType),        // up to 60
+    scrapeClickAndBoatSitemap(location, boatType),   // up to 40 (streamed)
+    scrapeSamboatSitemap(location, boatType),        // up to 35 (streamed)
+  ]);
+
+  // Batch 2: Lighter JSON-LD scrapers (fast, small responses)
+  const batch2 = await Promise.allSettled([
     scrapeClickAndBoat(location, boatType),     // up to 15
     scrapeSamboat(location, boatType),          // up to 20
     scrapeNautal(location, boatType),           // up to 20
@@ -928,6 +996,8 @@ export async function scrapeAllPlatforms(
     scrapeBoataround(location, boatType),       // up to 20
     scrapeZizoo(location, boatType),            // up to 20
   ]);
+
+  const results = [...batch1, ...batch2];
 
   const allListings: ExtractedListing[] = [];
   const seenNames = new Set<string>();

@@ -368,8 +368,8 @@ export async function GET(req: NextRequest) {
           return true;
         });
 
-        // Fetch top 20 pages
-        const topPages = diverseResults.slice(0, 20);
+        // Fetch top 12 pages (reduced from 20 to limit memory on 512MB Render)
+        const topPages = diverseResults.slice(0, 12);
         const detailLinksByDomain = new Map<string, string[]>();
 
         const pageContents = await Promise.all(
