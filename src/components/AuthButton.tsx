@@ -80,20 +80,20 @@ export function AuthButton() {
           </div>
 
           <Link
-            href="/profile"
+            href="/dashboard"
             onClick={() => setOpen(false)}
             className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
           >
             <Heart className="w-4 h-4" />
-            Gespeicherte Boote
+            Mein Dashboard
           </Link>
           <Link
-            href="/profile/alerts"
+            href="/profile"
             onClick={() => setOpen(false)}
             className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
           >
             <Bell className="w-4 h-4" />
-            Benachrichtigungen
+            Gespeicherte Boote
           </Link>
           <Link
             href="/partner"
