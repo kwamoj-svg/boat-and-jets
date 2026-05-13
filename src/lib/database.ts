@@ -351,13 +351,19 @@ export async function searchCharterBoats(opts: {
     if (opts.boatType) {
       const typeMap: Record<string, string[]> = {
         motor: ["motorboat", "yacht", "speedboat"],
-        sailing: ["sailboat"],
-        catamaran: ["catamaran"],
-        gulet: ["gulet"],
-        yacht: ["yacht", "motorboat"],
+        motorboat: ["motorboat", "yacht", "speedboat"],
         motorboot: ["motorboat", "yacht", "speedboat"],
+        sailing: ["sailboat"],
+        sailboat: ["sailboat"],
         segelboot: ["sailboat"],
+        segelyacht: ["sailboat", "yacht"],
+        catamaran: ["catamaran"],
         katamaran: ["catamaran"],
+        gulet: ["gulet"],
+        yacht: ["yacht", "motorboat", "sailboat", "catamaran"], // generic — match all luxury
+        speedboat: ["speedboat", "motorboat"],
+        houseboat: ["houseboat"],
+        jetski: ["jet_ski"],
       };
       const types = typeMap[opts.boatType.toLowerCase()] || [opts.boatType.toLowerCase()];
       if (types.length === 1) {
@@ -367,15 +373,25 @@ export async function searchCharterBoats(opts: {
       }
     }
 
-    if (opts.country) {
-      query = query.ilike("country", `%${opts.country}%`);
-    }
-    if (opts.region) {
-      query = query.ilike("region", `%${opts.region}%`);
-    }
-    if (opts.city) {
-      // Match city against base_port OR country (some platforms put city in country)
-      query = query.or(`base_port.ilike.%${opts.city}%,country.ilike.%${opts.city}%,region.ilike.%${opts.city}%`);
+    // Combine country/region/city/base_port into a single OR — many parsers
+    // disagree about which field something like "Sardinien" or "Mallorca"
+    // belongs in (region vs city vs port), and the DB normalization isn't
+    // always perfect either. Match if ANY field contains the term.
+    const locationTerms: string[] = [];
+    if (opts.country) locationTerms.push(opts.country);
+    if (opts.region && !locationTerms.includes(opts.region)) locationTerms.push(opts.region);
+    if (opts.city && !locationTerms.includes(opts.city)) locationTerms.push(opts.city);
+
+    if (locationTerms.length > 0) {
+      const orParts = locationTerms.flatMap((t) => {
+        const safe = t.replace(/[(),%]/g, ""); // sanitize for PostgREST or-string
+        return [
+          `country.ilike.%${safe}%`,
+          `region.ilike.%${safe}%`,
+          `base_port.ilike.%${safe}%`,
+        ];
+      });
+      query = query.or(orParts.join(","));
     }
     if (opts.guests) {
       query = query.gte("max_guests", opts.guests);
