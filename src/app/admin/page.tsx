@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import {
   Users, Building2, Ship, Globe, Search,
   TrendingUp, Clock, Shield, Crown, AlertTriangle,
-  BarChart3,
+  BarChart3, Check, X, Mail, ExternalLink,
 } from "lucide-react";
 
 interface Stats {
@@ -49,9 +49,32 @@ function StatCard({
   );
 }
 
+interface PendingPartner {
+  id: string;
+  company_name: string;
+  company_type: string;
+  email: string;
+  phone: string | null;
+  city: string | null;
+  country: string | null;
+  website: string | null;
+  description: string | null;
+  created_at: string;
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingList, setPendingList] = useState<PendingPartner[]>([]);
+  const [actionPending, setActionPending] = useState<string | null>(null);
+
+  const loadPending = () =>
+    fetch("/api/admin?entity=partners&status=pending&limit=20")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.results) setPendingList(data.results as PendingPartner[]);
+      })
+      .catch(() => {});
 
   useEffect(() => {
     fetch("/api/admin?entity=stats")
@@ -59,7 +82,21 @@ export default function AdminDashboard() {
       .then(setStats)
       .catch(() => {})
       .finally(() => setLoading(false));
+    loadPending();
   }, []);
+
+  async function decide(id: string, status: "approved" | "rejected") {
+    setActionPending(id);
+    await fetch("/api/admin", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entity: "partners", id, updates: { status } }),
+    });
+    setPendingList((cur) => cur.filter((p) => p.id !== id));
+    setActionPending(null);
+    // Refresh stats counter
+    fetch("/api/admin?entity=stats").then((r) => r.json()).then(setStats).catch(() => {});
+  }
 
   if (loading) {
     return (
@@ -102,6 +139,85 @@ export default function AdminDashboard() {
           <a href="/admin/partners?status=pending" className="ml-auto text-amber-300 hover:text-white underline underline-offset-2">
             Prüfen →
           </a>
+        </div>
+      )}
+
+      {/* Pending Applications Panel */}
+      {pendingList.length > 0 && (
+        <div className="mb-8 bg-white/[0.03] border border-amber-500/20 rounded-2xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between bg-amber-500/5">
+            <h2 className="text-white text-base font-medium flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-amber-400" />
+              Partner-Anfragen ({pendingList.length})
+            </h2>
+            <a
+              href="/admin/partners?status=pending"
+              className="text-xs text-amber-300 hover:text-amber-200 transition-colors"
+            >
+              Alle ansehen →
+            </a>
+          </div>
+          <div className="divide-y divide-white/5 max-h-[480px] overflow-y-auto">
+            {pendingList.map((p) => (
+              <div key={p.id} className="px-5 py-4 hover:bg-white/[0.02] transition-colors">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-white font-medium truncate">{p.company_name}</h3>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-gray-400 capitalize">
+                        {p.company_type?.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-1.5">
+                      <span className="flex items-center gap-1">
+                        <Mail className="w-3 h-3" /> {p.email}
+                      </span>
+                      {p.phone && <span>{p.phone}</span>}
+                      {(p.city || p.country) && (
+                        <span>{[p.city, p.country].filter(Boolean).join(", ")}</span>
+                      )}
+                      {p.website && (
+                        <a
+                          href={p.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-blue-400 hover:text-blue-300"
+                        >
+                          Website <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                      <span className="text-gray-600">
+                        {new Date(p.created_at).toLocaleDateString("de-DE", {
+                          day: "numeric", month: "short", year: "numeric",
+                        })}
+                      </span>
+                    </div>
+                    {p.description && (
+                      <p className="text-xs text-gray-400 mt-2 line-clamp-2">{p.description}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => decide(p.id, "approved")}
+                      disabled={actionPending === p.id}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-1.5 hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+                    >
+                      <Check className="w-3 h-3" />
+                      Freigeben
+                    </button>
+                    <button
+                      onClick={() => decide(p.id, "rejected")}
+                      disabled={actionPending === p.id}
+                      className="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-1.5 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                    >
+                      <X className="w-3 h-3" />
+                      Ablehnen
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

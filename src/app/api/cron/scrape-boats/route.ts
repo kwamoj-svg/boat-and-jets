@@ -137,26 +137,59 @@ function detectBoatType(type: string): string {
   return "motorboat";
 }
 
-/** Convert ExtractedListing to charter_boats row */
+/** Clean up duplicate-brand patterns like "Azimut Azimut 58" → "Azimut 58" */
+function cleanName(rawName: string, brand: string | null): string {
+  let name = (rawName || "").trim();
+  if (brand) {
+    const b = brand.trim();
+    // Collapse "Brand Brand Model" → "Brand Model"
+    const dupRx = new RegExp(`^${b}\\s+${b}\\b`, "i");
+    name = name.replace(dupRx, b);
+  }
+  // Collapse repeated whitespace
+  name = name.replace(/\s+/g, " ").trim();
+  return name;
+}
+
+/** Sanity-check a price — reject obviously broken values (1€, 5€) */
+function sanePrice(p: number | null | undefined, min = 50): number | null {
+  if (!p || typeof p !== "number") return null;
+  if (p < min) return null;
+  if (p > 1_000_000) return null;
+  return p;
+}
+
+/** Convert ExtractedListing to charter_boats row. Returns null if the
+ *  listing is too low-quality to insert. */
 function listingToBoat(
   listing: ExtractedListing,
   target: ScrapeTarget,
   companyId: string
-): Record<string, unknown> {
+): Record<string, unknown> | null {
+  const brand = listing.brand || null;
+  const name = cleanName(listing.name || "", brand);
+  // Skip totally empty or one-word names that aren't a known brand
+  if (!name || name.length < 3) return null;
+
+  const pricePerDay = sanePrice(listing.price_per_day);
+  const pricePerWeek = sanePrice(listing.price_per_week, 200);
+
+  // If both prices are bad, still insert (browseable) but with NULL pricing
+  // — better than showing "1 EUR / day".
   return {
     company_id: companyId,
-    name: listing.name,
-    slug: slugify(`${listing.name}-${target.location}`),
+    name,
+    slug: slugify(`${name}-${target.location}`),
     boat_type: detectBoatType(listing.type),
-    brand: listing.brand || null,
+    brand,
     model: listing.model || null,
     year: listing.year || null,
     length_m: listing.length_ft ? Math.round((listing.length_ft / 3.281) * 10) / 10 : null,
     cabins: listing.cabins || null,
     max_guests: listing.guests || null,
     crew_size: listing.crew || 0,
-    price_per_day: listing.price_per_day || null,
-    price_per_week: listing.price_per_week || null,
+    price_per_day: pricePerDay,
+    price_per_week: pricePerWeek,
     currency: listing.currency || "EUR",
     base_port: listing.port || target.location,
     country: listing.country || target.country,
@@ -327,6 +360,7 @@ async function processTarget(
       }
 
       const boat = listingToBoat(listing, target, companyId);
+      if (!boat) continue;
       const { error } = await db
         .from("charter_boats")
         .upsert(boat, { onConflict: "company_id,name,boat_type", ignoreDuplicates: false });
