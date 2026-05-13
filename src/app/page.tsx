@@ -72,7 +72,7 @@ export default function Home() {
             className="animate-fade-in max-w-3xl mx-auto relative z-20"
             style={{ animationDelay: "0.3s", opacity: 0 }}
           >
-            <SearchInput size="large" autoFocus onDropdownChange={handleDropdown} />
+            <SearchInput size="large" onDropdownChange={handleDropdown} />
           </div>
 
           {/* Filter system */}
