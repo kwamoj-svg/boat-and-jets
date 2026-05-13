@@ -300,14 +300,27 @@ export async function GET(req: NextRequest) {
   });
 
   let inserted = 0;
-  const batchSize = 50;
+  let errorMsg: string | null = null;
+  const batchSize = 100;
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
-    const { error } = await db
+    const { error, count } = await db
       .from("charter_boats")
-      .upsert(batch, { onConflict: "company_id,name,boat_type", ignoreDuplicates: false });
-    if (!error) inserted += batch.length;
+      .upsert(batch, { onConflict: "slug", ignoreDuplicates: false, count: "exact" });
+    if (error) {
+      errorMsg = error.message;
+      // Fallback: try one-by-one to skip individual bad rows
+      for (const row of batch) {
+        const { error: e } = await db
+          .from("charter_boats")
+          .upsert(row, { onConflict: "slug", ignoreDuplicates: false });
+        if (!e) inserted++;
+      }
+    } else {
+      inserted += count ?? batch.length;
+    }
   }
+  void errorMsg;
 
   // Log the run
   await db.from("scrape_log").insert({
