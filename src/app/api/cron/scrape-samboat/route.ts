@@ -300,27 +300,29 @@ export async function GET(req: NextRequest) {
   });
 
   let inserted = 0;
-  let errorMsg: string | null = null;
+  let lastError: string | null = null;
   const batchSize = 100;
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
-    const { error, count } = await db
+    // First try bulk upsert — fastest path
+    const { error: bulkErr, data } = await db
       .from("charter_boats")
-      .upsert(batch, { onConflict: "slug", ignoreDuplicates: false, count: "exact" });
-    if (error) {
-      errorMsg = error.message;
-      // Fallback: try one-by-one to skip individual bad rows
-      for (const row of batch) {
-        const { error: e } = await db
-          .from("charter_boats")
-          .upsert(row, { onConflict: "slug", ignoreDuplicates: false });
-        if (!e) inserted++;
-      }
-    } else {
-      inserted += count ?? batch.length;
+      .upsert(batch, { onConflict: "slug", ignoreDuplicates: false })
+      .select("id");
+    if (!bulkErr) {
+      inserted += data?.length ?? batch.length;
+      continue;
+    }
+    lastError = bulkErr.message;
+    // Fallback: row-by-row to isolate bad rows
+    for (const row of batch) {
+      const { error: e } = await db
+        .from("charter_boats")
+        .upsert(row, { onConflict: "slug", ignoreDuplicates: false });
+      if (!e) inserted++;
+      else if (!lastError) lastError = e.message;
     }
   }
-  void errorMsg;
 
   // Log the run
   await db.from("scrape_log").insert({
@@ -339,6 +341,7 @@ export async function GET(req: NextRequest) {
     limit,
     matched: candidates.length,
     inserted,
+    lastError,
     nextSkip: skip + candidates.length,
     sample: rows.slice(0, 5).map((r) => ({
       name: r.name,

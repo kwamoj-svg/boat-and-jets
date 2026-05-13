@@ -30,6 +30,28 @@ WHERE source = 'auto_scrape'
   AND (description IS NULL OR length(description) < 30)
   AND (images IS NULL OR array_length(images, 1) IS NULL);
 
+-- 5) Clean up junk suffixes in names (e.g. "Hallberg Rassy 352 Copy Improoved"
+-- → "Hallberg Rassy 352"). These come from scraping listings that the source
+-- platform tagged as 'Copy of' or 'Improved'/'Improoved'.
+UPDATE charter_boats
+SET name = regexp_replace(name,
+  '\s+(Copy|Kopie|Improoved|Improved|Verbessert|Beep|Beep B|Bee B)\b.*$',
+  '', 'i')
+WHERE name ~* '\s+(Copy|Kopie|Improoved|Improved|Verbessert|Beep)\b';
+
+UPDATE sale_boats
+SET name = regexp_replace(name,
+  '\s+(Copy|Kopie|Improoved|Improved|Verbessert)\b.*$',
+  '', 'i')
+WHERE name ~* '\s+(Copy|Kopie|Improoved|Improved|Verbessert)\b';
+
+-- 6) Also remove cryptic listing-id suffixes like "B2qp7b" or "1Ggykbz"
+-- (random alphanumeric tokens of 5-8 chars at end of name)
+UPDATE charter_boats
+SET name = regexp_replace(name, '\s+[A-Za-z0-9]{5,8}$', '')
+WHERE name ~ '\s+[A-Za-z0-9]{5,8}$'
+  AND name !~ '[A-Z][a-z]+\s+\d+$'; -- don't strip "Lagoon 46" type real models
+
 -- 5) Report what's left
 SELECT
   COUNT(*) AS total_active,

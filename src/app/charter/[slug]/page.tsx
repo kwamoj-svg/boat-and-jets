@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { AddToCrmButton } from "@/components/AddToCrmButton";
+import type { ExtractedListing } from "@/lib/claude-ai";
 import {
   Anchor, Ship, MapPin, Users, Ruler, Star, Phone, Mail,
   ExternalLink, Globe, ChevronLeft, Bed, Waves, Fuel, Shield,
@@ -261,14 +263,32 @@ export default function BoatDetailPage() {
             </div>
           </div>
 
-          {boat.price_per_day != null && (
-            <div className="text-right">
-              <div className="text-2xl text-gold font-medium">
-                {formatPrice(boat.price_per_day, boat.currency)}
+          <div className="flex flex-col items-end gap-3">
+            {boat.price_per_day != null && (
+              <div className="text-right">
+                <div className="text-2xl text-gold font-medium">
+                  {formatPrice(boat.price_per_day, boat.currency)}
+                </div>
+                <div className="text-xs text-gray-500">pro Tag</div>
               </div>
-              <div className="text-xs text-gray-500">pro Tag</div>
-            </div>
-          )}
+            )}
+            <AddToCrmButton
+              listing={{
+                name: boat.name,
+                source_url: `https://veliqa.life/charter/${boat.slug}`,
+                image_url: boat.images?.[0] || null,
+                type: boat.boat_type,
+                brand: boat.brand,
+                model: boat.model,
+                year: boat.year,
+                price_per_day: boat.price_per_day,
+                currency: boat.currency,
+                location: [boat.base_port, boat.country].filter(Boolean).join(", "),
+                country: boat.country,
+                description: boat.description,
+              } as unknown as ExtractedListing}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
