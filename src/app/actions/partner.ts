@@ -41,7 +41,9 @@ export async function registerPartner(formData: FormData) {
     country: country || null,
     tax_id: taxId || null,
     description: description || null,
-    status: "pending",
+    // Auto-approve new partners during early phase — admin can demote later
+    // via /admin/partners if abuse is detected.
+    status: "approved",
   });
 
   if (error) {
