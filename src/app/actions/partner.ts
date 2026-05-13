@@ -29,6 +29,16 @@ export async function registerPartner(formData: FormData) {
     return { error: "Bitte fülle alle Pflichtfelder aus." };
   }
 
+  // Refuse second registration — one partner profile per user
+  const { data: existing } = await supabase
+    .from("partners")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (existing) {
+    return { error: "Du hast bereits ein Partner-Unternehmen registriert." };
+  }
+
   const { error } = await supabase.from("partners").insert({
     user_id: user.id,
     company_name: companyName,
@@ -41,9 +51,8 @@ export async function registerPartner(formData: FormData) {
     country: country || null,
     tax_id: taxId || null,
     description: description || null,
-    // Auto-approve new partners during early phase — admin can demote later
-    // via /admin/partners if abuse is detected.
-    status: "approved",
+    // New partners need admin approval — protects platform from spam.
+    status: "pending",
   });
 
   if (error) {
