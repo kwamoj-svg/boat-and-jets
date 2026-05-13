@@ -186,7 +186,7 @@ async function getSamboatCompany(db: SupabaseClient): Promise<string | null> {
     .insert({
       company_name: "Samboat",
       slug,
-      company_type: "platform",
+      company_type: "charter",
       country: "Worldwide",
       website: "https://www.samboat.de",
       verified: true,
