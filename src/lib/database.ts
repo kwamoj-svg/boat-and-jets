@@ -479,3 +479,155 @@ export async function searchCharterBoats(opts: {
     return [];
   }
 }
+
+/* ─────────────────────────────────────────────
+   CHARTER COMPANIES: search the 1000+ providers
+   Each matching company becomes a listing — represents
+   their fleet as a whole, links to their website.
+   ───────────────────────────────────────────── */
+
+interface CharterCompanyRow {
+  id: string;
+  company_name: string;
+  slug: string;
+  company_type: string | null;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  marina: string | null;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  logo_url: string | null;
+  cover_image: string | null;
+  description: string | null;
+  fleet_size: number | null;
+  rating: number | null;
+  review_count: number | null;
+  verified: boolean;
+  featured: boolean;
+  services: string[] | null;
+  languages: string[] | null;
+  price_range: string | null;
+}
+
+export async function searchCharterCompanies(opts: {
+  query?: string;
+  country?: string;
+  region?: string;
+  city?: string;
+  boatType?: string;
+  limit?: number;
+}): Promise<ExtractedListing[]> {
+  const db = getClient();
+  if (!db) return [];
+
+  try {
+    let query = db
+      .from("charter_companies")
+      .select("*")
+      .limit(opts.limit || 30);
+
+    // Location: OR across country/region/city/marina — same as boats search
+    const locationTerms: string[] = [];
+    if (opts.country) locationTerms.push(opts.country);
+    if (opts.region && !locationTerms.includes(opts.region)) locationTerms.push(opts.region);
+    if (opts.city && !locationTerms.includes(opts.city)) locationTerms.push(opts.city);
+
+    if (locationTerms.length > 0) {
+      const orParts = locationTerms.flatMap((t) => {
+        const safe = t.replace(/[(),%]/g, "");
+        return [
+          `country.ilike.%${safe}%`,
+          `region.ilike.%${safe}%`,
+          `city.ilike.%${safe}%`,
+          `marina.ilike.%${safe}%`,
+        ];
+      });
+      query = query.or(orParts.join(","));
+    }
+
+    // Boat type → match in services array (companies tag their services like 'sailing', 'power_charter')
+    if (opts.boatType) {
+      const SERVICE_MAP: Record<string, string[]> = {
+        sailing: ["sailing", "bareboat", "skippered_charter"],
+        sailboat: ["sailing", "bareboat"],
+        segelboot: ["sailing", "bareboat"],
+        catamaran: ["catamaran", "sailing"],
+        katamaran: ["catamaran"],
+        motor: ["power_charter", "motor_charter", "yacht_charter"],
+        motorboat: ["power_charter", "motor_charter", "yacht_charter"],
+        motorboot: ["power_charter", "motor_charter", "yacht_charter"],
+        yacht: ["yacht_charter", "luxury_charter", "crewed_charter"],
+        gulet: ["gulet_charter", "crewed_charter"],
+      };
+      const services = SERVICE_MAP[opts.boatType.toLowerCase()];
+      if (services && services.length > 0) {
+        query = query.overlaps("services", services);
+      }
+    }
+
+    query = query
+      .order("featured", { ascending: false })
+      .order("rating", { ascending: false, nullsFirst: false })
+      .order("fleet_size", { ascending: false, nullsFirst: false });
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("[searchCharterCompanies] query error:", error.message);
+      return [];
+    }
+    if (!data) return [];
+
+    return (data as CharterCompanyRow[]).map((c) => {
+      const location = [c.city, c.region, c.country].filter(Boolean).join(", ");
+      const services = Array.isArray(c.services) ? c.services : [];
+
+      // Infer boat_type from services
+      let type = "yacht";
+      if (services.some((s) => /sail/i.test(s))) type = "sailing";
+      if (services.some((s) => /cat/i.test(s))) type = "catamaran";
+      if (services.some((s) => /gulet/i.test(s))) type = "gulet";
+      if (services.some((s) => /motor|power/i.test(s))) type = "motor";
+
+      const luxury = c.price_range === "luxury" || c.price_range === "premium" ? 4
+        : c.price_range === "mid" ? 3 : 2;
+
+      const reasons: string[] = ["Charter-Anbieter"];
+      if (c.verified) reasons.push("Verifiziert");
+      if (c.featured) reasons.push("Featured");
+      if (c.fleet_size && c.fleet_size >= 10) reasons.push(`${c.fleet_size} Boote in der Flotte`);
+      if (c.rating && c.rating >= 4) reasons.push(`★ ${c.rating.toFixed(1)}`);
+
+      return {
+        name: c.company_name,
+        type,
+        length_ft: null,
+        cabins: null,
+        guests: null,
+        crew: null,
+        year: null,
+        price_per_day: null,
+        price_per_week: null,
+        sale_price: null,
+        currency: "EUR",
+        location,
+        source_url: c.website || `https://veliqa.life/charter/company/${c.slug}`,
+        image_url: c.cover_image || c.logo_url || null,
+        description: (c.description || "").slice(0, 300),
+        features: services,
+        ai_summary: `Charter-Anbieter in ${location}${c.fleet_size ? ` — Flotte mit ${c.fleet_size} Booten` : ""}${c.rating ? ` (★ ${c.rating.toFixed(1)})` : ""}`,
+        match_score: c.featured ? 0.9 : c.verified ? 0.78 : 0.7,
+        match_reasons: reasons,
+        luxury_level: luxury,
+        verified: c.verified,
+        region: c.region || "",
+        country: c.country || "",
+        source_title: c.company_name,
+        is_company: true,
+      } as unknown as ExtractedListing;
+    });
+  } catch {
+    return [];
+  }
+}

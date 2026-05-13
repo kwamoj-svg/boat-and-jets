@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { parseUserQuery } from "@/lib/claude-ai";
-import { searchCharterBoats } from "@/lib/database";
+import { searchCharterBoats, searchCharterCompanies } from "@/lib/database";
 
 export const maxDuration = 30;
 
@@ -36,36 +36,55 @@ export async function GET(req: NextRequest) {
 
         send("stage", { stage: "database", message: "Durchsuche Bootskatalog..." });
 
-        const results = await searchCharterBoats({
-          query: q,
-          country: parsed.country || undefined,
-          region: parsed.region || undefined,
-          city: parsed.city || undefined,
-          boatType: parsed.boat_type || undefined,
-          guests: parsed.guests || undefined,
-          budgetPerDay: parsed.budget_per_day || undefined,
-          limit: 60,
-        });
+        // Search both boats AND companies in parallel
+        const [boats, companies] = await Promise.all([
+          searchCharterBoats({
+            query: q,
+            country: parsed.country || undefined,
+            region: parsed.region || undefined,
+            city: parsed.city || undefined,
+            boatType: parsed.boat_type || undefined,
+            guests: parsed.guests || undefined,
+            budgetPerDay: parsed.budget_per_day || undefined,
+            limit: 40,
+          }),
+          searchCharterCompanies({
+            query: q,
+            country: parsed.country || undefined,
+            region: parsed.region || undefined,
+            city: parsed.city || undefined,
+            boatType: parsed.boat_type || undefined,
+            limit: 30,
+          }),
+        ]);
+
+        // Merge: boats first (more specific), then companies
+        const results = [...boats, ...companies];
 
         if (results.length > 0) {
-          send("stage", {
-            stage: "results",
-            message: `${results.length} Boote im Katalog gefunden`,
-          });
-          for (const boat of results) {
-            send("listing", boat);
+          const breakdown =
+            boats.length > 0 && companies.length > 0
+              ? `${boats.length} Boote + ${companies.length} Charter-Anbieter`
+              : boats.length > 0
+              ? `${boats.length} Boote im Katalog gefunden`
+              : `${companies.length} Charter-Anbieter gefunden`;
+          send("stage", { stage: "results", message: breakdown });
+          for (const item of results) {
+            send("listing", item);
           }
         } else {
           send("stage", {
             stage: "empty",
             message:
-              "Noch keine passenden Boote im Katalog. Der stündliche Scraper sammelt laufend neue Daten — versuche es in 1–2 Stunden erneut oder mit weniger Filtern.",
+              "Noch keine passenden Einträge im Katalog. Der stündliche Scraper sammelt laufend neue Daten — versuche es in 1–2 Stunden erneut oder mit weniger Filtern.",
           });
         }
 
         send("done", {
           total_found: results.length,
           displayed: results.length,
+          boats: boats.length,
+          companies: companies.length,
           source: "database",
           search_id: crypto.randomUUID(),
         });
