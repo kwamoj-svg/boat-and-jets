@@ -346,11 +346,9 @@ export async function searchCharterBoats(opts: {
       .from("charter_boats")
       .select("*, charter_companies(company_name, slug, country, city, website, email, phone)")
       .eq("status", "active")
-      .order("price_per_day", { ascending: true, nullsFirst: false })
       .limit(opts.limit || 30);
 
     if (opts.boatType) {
-      // Map common types
       const typeMap: Record<string, string[]> = {
         motor: ["motorboat", "yacht", "speedboat"],
         sailing: ["sailboat"],
@@ -375,6 +373,10 @@ export async function searchCharterBoats(opts: {
     if (opts.region) {
       query = query.ilike("region", `%${opts.region}%`);
     }
+    if (opts.city) {
+      // Match city against base_port OR country (some platforms put city in country)
+      query = query.or(`base_port.ilike.%${opts.city}%,country.ilike.%${opts.city}%,region.ilike.%${opts.city}%`);
+    }
     if (opts.guests) {
       query = query.gte("max_guests", opts.guests);
     }
@@ -382,8 +384,30 @@ export async function searchCharterBoats(opts: {
       query = query.lte("price_per_day", opts.budgetPerDay * 1.3);
     }
 
+    // Text search across name/brand/model/port/description when free-text query provided
+    if (opts.query && opts.query.trim().length > 0) {
+      const words = opts.query
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2)
+        .filter((w) => !/^(boot|boat|yacht|charter|mieten|rental|hire|book)$/.test(w));
+
+      if (words.length > 0) {
+        const orConditions = words
+          .map((w) => `name.ilike.%${w}%,brand.ilike.%${w}%,model.ilike.%${w}%,base_port.ilike.%${w}%,description.ilike.%${w}%`)
+          .join(",");
+        query = query.or(orConditions);
+      }
+    }
+
+    query = query.order("price_per_day", { ascending: true, nullsFirst: false });
+
     const { data, error } = await query;
-    if (error || !data) return [];
+    if (error) {
+      console.error("[searchCharterBoats] query error:", error.message);
+      return [];
+    }
+    if (!data) return [];
 
     // Convert to ExtractedListing format
     return data.map((boat: Record<string, unknown>) => {
@@ -391,8 +415,11 @@ export async function searchCharterBoats(opts: {
       const companyName = company ? String(company.company_name || "") : "";
       const companyWebsite = company ? String(company.website || "") : "";
 
+      const images = Array.isArray(boat.images) ? (boat.images as string[]) : [];
+      const detailUrl = boat.detail_url ? String(boat.detail_url) : null;
+
       return {
-        name: `${String(boat.brand || "")} ${String(boat.model || String(boat.name || ""))}`.trim() || String(boat.name),
+        name: String(boat.name) || `${String(boat.brand || "")} ${String(boat.model || "")}`.trim(),
         type: String(boat.boat_type || "motorboat"),
         length_ft: boat.length_m ? Math.round(Number(boat.length_m) * 3.281) : null,
         cabins: boat.cabins ? Number(boat.cabins) : null,
@@ -404,8 +431,8 @@ export async function searchCharterBoats(opts: {
         sale_price: null,
         currency: String(boat.currency || "EUR"),
         location: [boat.base_port, boat.country].filter(Boolean).join(", "),
-        source_url: companyWebsite || `https://veliqa.life/charter/${boat.slug}`,
-        image_url: null,
+        source_url: detailUrl || companyWebsite || `https://veliqa.life/charter/${boat.slug}`,
+        image_url: images[0] || null,
         description: String(boat.description || ""),
         features: Array.isArray(boat.features) ? boat.features.map(String) : [],
         ai_summary: `${companyName} — ${String(boat.charter_type || "bareboat")} charter in ${[boat.base_port, boat.country].filter(Boolean).join(", ")}`,
