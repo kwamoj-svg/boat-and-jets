@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Logo } from "./Logo";
 import { SearchInput } from "./SearchInput";
 import { AuthButton } from "./AuthButton";
@@ -17,7 +18,16 @@ interface PartnerState {
   status: string | null;
 }
 
+/** Returns Tailwind classes for a nav link based on whether it matches the
+ *  current pathname.  Active links get the gold treatment. */
+function navLinkClass(active: boolean): string {
+  return active
+    ? "text-sm text-gold font-medium hidden sm:flex items-center gap-1.5 transition-colors relative after:absolute after:left-0 after:right-0 after:-bottom-[20px] after:h-0.5 after:bg-gold after:rounded-t"
+    : "text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block";
+}
+
 export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
+  const pathname = usePathname() || "/";
   const [partner, setPartner] = useState<PartnerState>({ isPartner: false, status: null });
 
   useEffect(() => {
@@ -31,6 +41,14 @@ export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
     return () => { mounted = false; };
   }, []);
 
+  // Match active section — "/charter/abc-123" still highlights "Charter"
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    return pathname === href || pathname.startsWith(href + "/");
+  };
+
+  const partnerActive = isActive("/partner");
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -43,35 +61,27 @@ export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
             </div>
           )}
 
-          <div className="flex items-center gap-3">
-            <Link
-              href="/charter"
-              className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
-            >
+          <div className="flex items-center gap-5">
+            <Link href="/charter" className={navLinkClass(isActive("/charter"))}>
               Charter
             </Link>
-            <Link
-              href="/sale"
-              className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
-            >
+            <Link href="/sale" className={navLinkClass(isActive("/sale"))}>
               Kaufen
             </Link>
-            <Link
-              href="/network"
-              className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
-            >
+            <Link href="/network" className={navLinkClass(isActive("/network"))}>
               Network
             </Link>
-            <Link
-              href="/crm"
-              className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
-            >
+            <Link href="/crm" className={navLinkClass(isActive("/crm"))}>
               CRM
             </Link>
             {partner.isPartner ? (
               <Link
                 href="/partner"
-                className="text-sm text-gold/80 hover:text-gold transition-colors hidden sm:flex items-center gap-1.5"
+                className={
+                  partnerActive
+                    ? "text-sm text-gold font-medium hidden sm:flex items-center gap-1.5 transition-colors relative after:absolute after:left-0 after:right-0 after:-bottom-[20px] after:h-0.5 after:bg-gold after:rounded-t"
+                    : "text-sm text-gold/80 hover:text-gold transition-colors hidden sm:flex items-center gap-1.5"
+                }
                 title={partner.status === "approved" ? "Mein Unternehmen" : "Mein Unternehmen (Verifizierung läuft)"}
               >
                 Mein Unternehmen
@@ -84,7 +94,7 @@ export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
             ) : (
               <Link
                 href="/partner/register"
-                className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
+                className={navLinkClass(isActive("/partner"))}
               >
                 For Business
               </Link>
