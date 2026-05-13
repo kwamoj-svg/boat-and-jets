@@ -213,6 +213,190 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results: data ?? [] });
   }
 
+  // ─ Analytics Overview ─
+  if (entity === "analytics") {
+    const days = parseInt(searchParams.get("days") || "30");
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+
+    // Get raw counts per event type
+    const eventTypes = ["page_view", "search", "boat_click", "charter_click", "company_click", "contact_click", "destination_click", "filter_use", "outbound_link"];
+    const counts: Record<string, number> = {};
+    await Promise.all(
+      eventTypes.map(async (t) => {
+        const { count } = await db
+          .from("analytics_events")
+          .select("id", { count: "exact", head: true })
+          .eq("event_type", t)
+          .gte("created_at", since);
+        counts[t] = count ?? 0;
+      })
+    );
+
+    // Total unique sessions
+    const { data: sessionData } = await db
+      .from("analytics_events")
+      .select("session_id")
+      .gte("created_at", since)
+      .limit(10000);
+    const uniqueSessions = new Set((sessionData ?? []).map((r: Record<string, string>) => r.session_id)).size;
+
+    // Top clicked boats
+    const { data: topBoats } = await db
+      .from("analytics_events")
+      .select("entity_id, entity_name")
+      .eq("event_type", "boat_click")
+      .gte("created_at", since)
+      .limit(5000);
+
+    const boatCounts: Record<string, { name: string; count: number }> = {};
+    for (const r of topBoats ?? []) {
+      const key = r.entity_id || "unknown";
+      if (!boatCounts[key]) boatCounts[key] = { name: r.entity_name || key, count: 0 };
+      boatCounts[key].count++;
+    }
+    const topBoatsList = Object.entries(boatCounts)
+      .map(([id, v]) => ({ id, name: v.name, clicks: v.count }))
+      .sort((a, b) => b.clicks - a.clicks)
+      .slice(0, 20);
+
+    // Top searches
+    const { data: topSearches } = await db
+      .from("analytics_events")
+      .select("search_query")
+      .eq("event_type", "search")
+      .gte("created_at", since)
+      .not("search_query", "is", null)
+      .limit(5000);
+
+    const searchCounts: Record<string, number> = {};
+    for (const r of topSearches ?? []) {
+      const q = (r.search_query || "").toLowerCase().trim();
+      if (q) searchCounts[q] = (searchCounts[q] || 0) + 1;
+    }
+    const topSearchesList = Object.entries(searchCounts)
+      .map(([query, count]) => ({ query, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20);
+
+    // Top destinations
+    const { data: topDests } = await db
+      .from("analytics_events")
+      .select("entity_name")
+      .eq("event_type", "destination_click")
+      .gte("created_at", since)
+      .limit(5000);
+
+    const destCounts: Record<string, number> = {};
+    for (const r of topDests ?? []) {
+      const d = r.entity_name || "unknown";
+      destCounts[d] = (destCounts[d] || 0) + 1;
+    }
+    const topDestsList = Object.entries(destCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Device breakdown
+    const { data: deviceData } = await db
+      .from("analytics_events")
+      .select("device_type")
+      .gte("created_at", since)
+      .limit(10000);
+
+    const devices: Record<string, number> = { desktop: 0, mobile: 0, tablet: 0 };
+    for (const r of deviceData ?? []) {
+      const d = r.device_type || "desktop";
+      devices[d] = (devices[d] || 0) + 1;
+    }
+
+    // Daily trend (last N days)
+    const { data: dailyData } = await db
+      .from("analytics_events")
+      .select("created_at, event_type")
+      .gte("created_at", since)
+      .order("created_at", { ascending: true })
+      .limit(50000);
+
+    const dailyTrend: Record<string, Record<string, number>> = {};
+    for (const r of dailyData ?? []) {
+      const day = r.created_at?.slice(0, 10) || "";
+      if (!dailyTrend[day]) dailyTrend[day] = {};
+      dailyTrend[day][r.event_type] = (dailyTrend[day][r.event_type] || 0) + 1;
+    }
+
+    // Top pages
+    const { data: pageData } = await db
+      .from("analytics_events")
+      .select("page_url")
+      .eq("event_type", "page_view")
+      .gte("created_at", since)
+      .limit(5000);
+
+    const pageCounts: Record<string, number> = {};
+    for (const r of pageData ?? []) {
+      const p = r.page_url || "/";
+      pageCounts[p] = (pageCounts[p] || 0) + 1;
+    }
+    const topPages = Object.entries(pageCounts)
+      .map(([url, count]) => ({ url, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 15);
+
+    // Contact clicks breakdown
+    const { data: contactData } = await db
+      .from("analytics_events")
+      .select("entity_name, metadata")
+      .eq("event_type", "contact_click")
+      .gte("created_at", since)
+      .limit(5000);
+
+    const contactCounts: Record<string, { total: number; methods: Record<string, number> }> = {};
+    for (const r of contactData ?? []) {
+      const name = r.entity_name || "unknown";
+      if (!contactCounts[name]) contactCounts[name] = { total: 0, methods: {} };
+      contactCounts[name].total++;
+      const method = (r.metadata as Record<string, string>)?.method || "other";
+      contactCounts[name].methods[method] = (contactCounts[name].methods[method] || 0) + 1;
+    }
+    const topContacts = Object.entries(contactCounts)
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 15);
+
+    return NextResponse.json({
+      period_days: days,
+      total_events: Object.values(counts).reduce((a, b) => a + b, 0),
+      unique_sessions: uniqueSessions,
+      event_counts: counts,
+      devices,
+      daily_trend: dailyTrend,
+      top_boats: topBoatsList,
+      top_searches: topSearchesList,
+      top_destinations: topDestsList,
+      top_pages: topPages,
+      top_contacts: topContacts,
+    });
+  }
+
+  // ─ Analytics: Recent Events ─
+  if (entity === "analytics_events") {
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
+    const eventType = searchParams.get("event_type") || "";
+    const entityId = searchParams.get("entity_id") || "";
+    const from = (page - 1) * limit;
+
+    let query = db.from("analytics_events").select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, from + limit - 1);
+
+    if (eventType) query = query.eq("event_type", eventType);
+    if (entityId) query = query.eq("entity_id", entityId);
+
+    const { data, count, error } = await query;
+    return NextResponse.json({ results: data ?? [], total: count ?? 0, page, error: error?.message });
+  }
+
   return NextResponse.json({ error: "Unknown entity" }, { status: 400 });
 }
 

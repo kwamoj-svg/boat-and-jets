@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Building2, Ship, Globe,
   Search, Settings, Shield, Menu, X, ChevronLeft, Anchor,
+  BarChart3,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -15,6 +16,7 @@ const NAV = [
   { href: "/admin/boats", label: "Boote", icon: Ship },
   { href: "/admin/network", label: "Yacht Network", icon: Globe },
   { href: "/admin/charter", label: "Charter DB", icon: Anchor },
+  { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/admin/searches", label: "Suchen", icon: Search },
   { href: "/admin/settings", label: "Einstellungen", icon: Settings },
 ];

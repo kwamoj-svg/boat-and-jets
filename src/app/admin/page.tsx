@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import {
   Users, Building2, Ship, Globe, Search,
   TrendingUp, Clock, Shield, Crown, AlertTriangle,
+  BarChart3,
 } from "lucide-react";
 
 interface Stats {
@@ -123,6 +124,7 @@ export default function AdminDashboard() {
         <QuickAction href="/admin/network" label="Network verwalten" desc="Yacht Network Partner bearbeiten" icon={Globe} />
         <QuickAction href="/admin/users" label="Benutzer verwalten" desc="Rollen zuweisen, Profile bearbeiten" icon={Users} />
         <QuickAction href="/admin/boats" label="Boote verwalten" desc="Partner-Boote prüfen und bearbeiten" icon={Ship} />
+        <QuickAction href="/admin/analytics" label="Analytics" desc="Detailliertes Tracking aller Klicks & Suchen" icon={BarChart3} />
         <QuickAction href="/admin/searches" label="Such-Cache" desc="Aktuelle Suchen und Cache einsehen" icon={Search} />
         <QuickAction href="/admin/settings" label="Einstellungen" desc="Platform-Konfiguration" icon={TrendingUp} />
       </div>
