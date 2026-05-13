@@ -29,7 +29,13 @@ export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
               href="/charter"
               className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
             >
-              Katalog
+              Charter
+            </Link>
+            <Link
+              href="/sale"
+              className="text-sm text-gray-400 hover:text-gold-light transition-colors hidden sm:block"
+            >
+              Kaufen
             </Link>
             <Link
               href="/network"
