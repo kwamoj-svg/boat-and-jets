@@ -547,25 +547,11 @@ export async function searchCharterCompanies(opts: {
       query = query.or(orParts.join(","));
     }
 
-    // Boat type → match in services array (companies tag their services like 'sailing', 'power_charter')
-    if (opts.boatType) {
-      const SERVICE_MAP: Record<string, string[]> = {
-        sailing: ["sailing", "bareboat", "skippered_charter"],
-        sailboat: ["sailing", "bareboat"],
-        segelboot: ["sailing", "bareboat"],
-        catamaran: ["catamaran", "sailing"],
-        katamaran: ["catamaran"],
-        motor: ["power_charter", "motor_charter", "yacht_charter"],
-        motorboat: ["power_charter", "motor_charter", "yacht_charter"],
-        motorboot: ["power_charter", "motor_charter", "yacht_charter"],
-        yacht: ["yacht_charter", "luxury_charter", "crewed_charter"],
-        gulet: ["gulet_charter", "crewed_charter"],
-      };
-      const services = SERVICE_MAP[opts.boatType.toLowerCase()];
-      if (services && services.length > 0) {
-        query = query.overlaps("services", services);
-      }
-    }
+    // Note: We deliberately don't filter companies by boat_type — charter
+    // companies typically operate mixed fleets (motor + sailing + catamaran)
+    // and their `services` arrays use generic terms like "skippered",
+    // "bareboat", "crewed", "luxury" rather than boat-type specific labels.
+    // Filtering would exclude too many relevant providers.
 
     query = query
       .order("featured", { ascending: false })
