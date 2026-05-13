@@ -313,7 +313,7 @@ export async function GET(req: NextRequest) {
     const batch = rows.slice(i, i + batchSize);
     const { error: bulkErr } = await db
       .from("charter_boats")
-      .upsert(batch, { onConflict: "slug", ignoreDuplicates: false });
+      .upsert(batch, { onConflict: "company_id,name,boat_type", ignoreDuplicates: false });
     if (!bulkErr) {
       upserted += batch.length;
       continue;
