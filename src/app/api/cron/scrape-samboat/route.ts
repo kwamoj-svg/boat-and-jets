@@ -299,30 +299,43 @@ export async function GET(req: NextRequest) {
     } as Record<string, unknown>;
   });
 
-  let inserted = 0;
+  // Count rows before to measure inserts vs updates
+  const countBefore = await db
+    .from("charter_boats")
+    .select("id", { count: "exact", head: true })
+    .eq("source", "samboat_sitemap");
+  const before = countBefore.count ?? 0;
+
+  let upserted = 0;
   let lastError: string | null = null;
   const batchSize = 100;
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
-    // First try bulk upsert — fastest path
-    const { error: bulkErr, data } = await db
+    const { error: bulkErr } = await db
       .from("charter_boats")
-      .upsert(batch, { onConflict: "slug", ignoreDuplicates: false })
-      .select("id");
+      .upsert(batch, { onConflict: "slug", ignoreDuplicates: false });
     if (!bulkErr) {
-      inserted += data?.length ?? batch.length;
+      upserted += batch.length;
       continue;
     }
     lastError = bulkErr.message;
-    // Fallback: row-by-row to isolate bad rows
+    // Fallback row-by-row
     for (const row of batch) {
       const { error: e } = await db
         .from("charter_boats")
         .upsert(row, { onConflict: "slug", ignoreDuplicates: false });
-      if (!e) inserted++;
+      if (!e) upserted++;
       else if (!lastError) lastError = e.message;
     }
   }
+
+  const countAfter = await db
+    .from("charter_boats")
+    .select("id", { count: "exact", head: true })
+    .eq("source", "samboat_sitemap");
+  const after = countAfter.count ?? 0;
+  const inserted = after - before; // net new rows
+  const updated = upserted - inserted;
 
   // Log the run
   await db.from("scrape_log").insert({
@@ -340,7 +353,10 @@ export async function GET(req: NextRequest) {
     skip,
     limit,
     matched: candidates.length,
+    upserted,
     inserted,
+    updated,
+    samboatRowsTotal: after,
     lastError,
     nextSkip: skip + candidates.length,
     sample: rows.slice(0, 5).map((r) => ({
