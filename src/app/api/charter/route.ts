@@ -23,9 +23,35 @@ function getServiceDb() {
  * ?view=company&id=xxx — single company with all their boats
  */
 export async function GET(req: NextRequest) {
+  try {
+    return await handleGet(req);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const cause = err instanceof Error && err.cause ? String(err.cause) : null;
+    console.error("[/api/charter] error:", message, cause);
+    return Response.json(
+      {
+        error: message,
+        cause,
+        hint: "Check Render env vars: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+async function handleGet(req: NextRequest) {
   const db = getDb();
   if (!db) {
-    return Response.json({ error: "Database not configured" }, { status: 500 });
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const hasKey = !!(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+    return Response.json(
+      {
+        error: "Database not configured",
+        diagnostic: { hasUrl: !!url, hasKey },
+      },
+      { status: 500 }
+    );
   }
 
   const { searchParams } = req.nextUrl;
