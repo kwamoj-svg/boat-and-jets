@@ -306,24 +306,31 @@ export async function GET(req: NextRequest) {
     .eq("source", "samboat_sitemap");
   const before = countBefore.count ?? 0;
 
+  // Pre-fetch existing samboat slugs so we only INSERT new ones — avoids
+  // the missing-unique-constraint issue with upsert.
+  const existing = await db
+    .from("charter_boats")
+    .select("slug")
+    .eq("source", "samboat_sitemap");
+  const existingSlugs = new Set<string>(
+    ((existing.data as { slug: string | null }[] | null) || []).map((r) => r.slug || "")
+  );
+  const fresh = rows.filter((r) => !existingSlugs.has(String(r.slug)));
+
   let upserted = 0;
   let lastError: string | null = null;
   const batchSize = 100;
-  for (let i = 0; i < rows.length; i += batchSize) {
-    const batch = rows.slice(i, i + batchSize);
-    const { error: bulkErr } = await db
-      .from("charter_boats")
-      .upsert(batch, { onConflict: "company_id,name,boat_type", ignoreDuplicates: false });
+  for (let i = 0; i < fresh.length; i += batchSize) {
+    const batch = fresh.slice(i, i + batchSize);
+    const { error: bulkErr } = await db.from("charter_boats").insert(batch);
     if (!bulkErr) {
       upserted += batch.length;
       continue;
     }
     lastError = bulkErr.message;
-    // Fallback row-by-row
+    // Fallback row-by-row to isolate bad rows
     for (const row of batch) {
-      const { error: e } = await db
-        .from("charter_boats")
-        .upsert(row, { onConflict: "slug", ignoreDuplicates: false });
+      const { error: e } = await db.from("charter_boats").insert(row);
       if (!e) upserted++;
       else if (!lastError) lastError = e.message;
     }
