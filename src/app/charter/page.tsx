@@ -101,11 +101,16 @@ function BoatTypeBadge({ type }: { type: string }) {
 function BoatCard({ boat }: { boat: CharterBoat }) {
   const company = boat.charter_companies;
   const hasImage = boat.images && boat.images.length > 0;
+  const bookingHref = boat.detail_url || `/charter/${boat.slug}`;
+  const isExternal = !!boat.detail_url;
+  const linkProps = isExternal
+    ? { href: bookingHref, target: "_blank", rel: "noopener noreferrer sponsored" as const }
+    : { href: bookingHref };
 
   return (
     <div className="glass rounded-2xl border border-white/10 hover:border-gold/20 transition-all duration-300 group overflow-hidden flex flex-col">
-      {/* Image / Gradient */}
-      <div className="relative h-48 overflow-hidden">
+      {/* Image / Gradient — clickable to booking page */}
+      <a {...linkProps} className="relative h-48 overflow-hidden block">
         {hasImage ? (
           <img
             src={boat.images[0]}
@@ -125,19 +130,26 @@ function BoatCard({ boat }: { boat: CharterBoat }) {
             {boat.year}
           </div>
         )}
-      </div>
+        {isExternal && (
+          <div className="absolute bottom-2 right-2 px-2 py-1 rounded-md bg-gold/90 text-navy text-[10px] font-semibold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            Buchen <ExternalLink className="w-3 h-3" />
+          </div>
+        )}
+      </a>
 
       {/* Content */}
       <div className="p-5 flex flex-col flex-1">
         <div className="mb-3">
-          <h3 className="text-white font-medium text-lg group-hover:text-gold-light transition-colors line-clamp-1">
-            {boat.name}
-          </h3>
-          {(boat.brand || boat.model) && (
-            <p className="text-sm text-gray-500 mt-0.5">
-              {[boat.brand, boat.model].filter(Boolean).join(" ")}
-            </p>
-          )}
+          <a {...linkProps} className="block">
+            <h3 className="text-white font-medium text-lg group-hover:text-gold-light transition-colors line-clamp-1">
+              {boat.name}
+            </h3>
+            {(boat.brand || boat.model) && (
+              <p className="text-sm text-gray-500 mt-0.5">
+                {[boat.brand, boat.model].filter(Boolean).join(" ")}
+              </p>
+            )}
+          </a>
         </div>
 
         {/* Specs */}
