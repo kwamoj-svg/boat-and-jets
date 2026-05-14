@@ -156,5 +156,39 @@ export async function GET(req: NextRequest) {
     report.errors.push(`delete: ${e}`);
   }
 
-  return NextResponse.json({ ok: true, ...report });
+  // 5) Dedupe by detail_url — keep newest, delete older copies
+  let dedupedCount = 0;
+  try {
+    const { data: allBoats } = await db
+      .from("charter_boats")
+      .select("id, detail_url, created_at")
+      .not("detail_url", "is", null)
+      .order("created_at", { ascending: false });
+
+    const seen = new Map<string, string>(); // detail_url → first (newest) id
+    const toDelete: string[] = [];
+    for (const row of (allBoats as { id: string; detail_url: string; created_at: string }[] | null) || []) {
+      if (!row.detail_url) continue;
+      if (seen.has(row.detail_url)) {
+        toDelete.push(row.id);
+      } else {
+        seen.set(row.detail_url, row.id);
+      }
+    }
+
+    // Delete in batches of 100
+    for (let i = 0; i < toDelete.length; i += 100) {
+      const batch = toDelete.slice(i, i + 100);
+      const { error } = await db.from("charter_boats").delete().in("id", batch);
+      if (!error) dedupedCount += batch.length;
+    }
+  } catch (e) {
+    report.errors.push(`dedupe: ${e}`);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    ...report,
+    duplicatesDeleted: dedupedCount,
+  });
 }
