@@ -356,16 +356,8 @@ function parseSerperResult(r: SerperResult, fallbackType: string): {
     /über \d+\.?\d* angebote/i.test(titleLower);
 
   if (isCategoryUrl || isGenericCatTitle) return null;
-
-  // Positive listing-indicator path segments (any of these means it's a
-  // concrete ad, not a category)
-  const isPositiveListing =
-    /\/(yacht|boat|boats|barca|bateau|veleros?|inserate|inserat|listing|ad|annonce|annunci|anuncio|advertentie|advert|product|item|p|post|status|reel|watch|video)\/[^/]+/i.test(path) ||
-    /\/(boots?|sailing|motor|catamaran)-[^/]+-\d/i.test(path) ||
-    // long detail slugs (≥4 dash-separated tokens) are almost always real listings
-    pathname.split("/").pop()!.split("-").length >= 4;
-
-  if (!isPositiveListing) return null;
+  // We're trusting the category-blocker now. Anything else passes —
+  // even niche broker / forum URLs that don't match a known pattern.
 
   const text = `${r.title} ${r.snippet || ""}`;
 
