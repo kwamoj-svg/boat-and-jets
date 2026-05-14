@@ -322,12 +322,15 @@ export async function GET(req: NextRequest) {
     return true;
   });
 
-  // Pre-fetch existing broker-lead source_urls so we skip dupes (we store in
-  // analytics_events because the dedicated broker_leads table isn't created yet).
+  // Pre-fetch existing broker-lead entity_ids so we skip dupes.
+  // We store in analytics_events because the dedicated broker_leads table
+  // isn't created yet. The event_type CHECK constraint only allows known
+  // values so we use 'outbound_link' + entity_type='broker_lead' as the
+  // filter discriminator.
   const existing = await db
     .from("analytics_events")
     .select("entity_id")
-    .eq("event_type", "broker_lead");
+    .eq("entity_type", "broker_lead");
   const existingIds = new Set<string>(
     ((existing.data as { entity_id: string | null }[] | null) || []).map((r) => r.entity_id || "")
   );
@@ -343,12 +346,12 @@ export async function GET(req: NextRequest) {
     if (existingIds.has(entityId)) continue;
 
     const { error } = await db.from("analytics_events").insert({
-      event_type: "broker_lead",
+      event_type: "outbound_link", // existing allowed type — discriminator is entity_type
       entity_type: "broker_lead",
       entity_id: entityId,
       entity_name: [lead.brand, lead.model].filter(Boolean).join(" ") || "Boot",
       country: lead.country,
-      properties: {
+      metadata: {
         intent: lead.intent,
         source_platform: lead.source_platform,
         source_url: lead.source_url,

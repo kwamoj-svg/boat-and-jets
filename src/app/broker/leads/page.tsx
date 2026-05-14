@@ -46,7 +46,7 @@ interface AnalyticsEventRow {
   entity_id: string | null;
   entity_name: string | null;
   country: string | null;
-  properties: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -61,13 +61,13 @@ export default async function BrokerLeadsPage() {
   // (dedicated broker_leads table isn't created — fallback storage works fine).
   const { data: rows } = await supabase
     .from("analytics_events")
-    .select("id, entity_id, entity_name, country, properties, created_at")
-    .eq("event_type", "broker_lead")
+    .select("id, entity_id, entity_name, country, metadata, created_at")
+    .eq("entity_type", "broker_lead")
     .order("created_at", { ascending: false })
     .limit(100);
 
   const safeLeads: BrokerLead[] = ((rows as AnalyticsEventRow[] | null) ?? []).map((r) => {
-    const p = r.properties || {};
+    const p = r.metadata || {};
     return {
       id: r.id,
       intent: String(p.intent || "sell"),

@@ -288,14 +288,15 @@ async function matchAlerts(
       if (c.max_length && Number(boat.length_m || 99999) > Number(c.max_length)) continue;
 
       // alert_triggers table not created — fallback to analytics_events
+      // event_type must be from allowed set; use 'boat_save' + entity_type discriminator
       const { error } = await db.from("analytics_events").insert({
         user_id: alert.user_id,
-        event_type: "alert_trigger",
-        entity_type: "sale_boat",
+        event_type: "boat_save",
+        entity_type: "sale_alert",
         entity_id: String(boat.id),
         entity_name: String(boat.name || ""),
         country: boat.country ? String(boat.country) : null,
-        properties: {
+        metadata: {
           alert_id: alert.id,
           match_kind: "sale",
           matched_table: "sale_boats",
