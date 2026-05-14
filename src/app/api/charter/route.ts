@@ -121,14 +121,10 @@ async function handleGet(req: NextRequest) {
     let query = db
       .from("charter_companies")
       .select("*", { count: "exact" })
+      .eq("slug", "samboat") // Only the Samboat company — affiliate phase
       .order("featured", { ascending: false })
       .order("rating", { ascending: false, nullsFirst: false })
       .range(from, from + limit - 1);
-
-    // Samboat-only: show only the Samboat company row
-    if (process.env.SAMBOAT_ONLY === "true" || process.env.NEXT_PUBLIC_SAMBOAT_ONLY === "true") {
-      query = query.eq("slug", "samboat");
-    }
 
     if (country) query = query.ilike("country", `%${country}%`);
     if (region) query = query.ilike("region", `%${region}%`);
@@ -167,13 +163,9 @@ async function handleGet(req: NextRequest) {
       .from("charter_boats")
       .select("*, charter_companies(company_name, slug, country)", { count: "exact" })
       .eq("status", "active")
+      .eq("source", "samboat_sitemap") // Only Samboat boats — affiliate phase
       .order("price_per_day", { ascending: true, nullsFirst: false })
       .range(from, from + limit - 1);
-
-    // Samboat-only filter (affiliate phase) — toggle via env var
-    if (process.env.SAMBOAT_ONLY === "true" || process.env.NEXT_PUBLIC_SAMBOAT_ONLY === "true") {
-      query = query.eq("source", "samboat_sitemap");
-    }
 
     if (type) query = query.eq("boat_type", type);
     if (country) query = query.ilike("country", `%${country}%`);

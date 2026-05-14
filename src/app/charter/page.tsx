@@ -206,10 +206,14 @@ function BoatCard({ boat }: { boat: CharterBoat }) {
         {/* Footer */}
         <div className="mt-auto flex items-end justify-between pt-3 border-t border-white/5">
           <div>
-            {boat.price_per_day != null && (
+            {boat.price_per_day != null ? (
               <div className="text-gold text-lg font-medium">
                 {boat.price_per_day.toLocaleString("de-DE")} {boat.currency || "EUR"}
                 <span className="text-xs text-gray-500 font-normal ml-1">/Tag</span>
+              </div>
+            ) : (
+              <div className="text-gray-400 text-sm font-medium">
+                Preis auf Anfrage
               </div>
             )}
             {company && (

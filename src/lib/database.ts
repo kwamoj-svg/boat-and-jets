@@ -346,12 +346,8 @@ export async function searchCharterBoats(opts: {
       .from("charter_boats")
       .select("*, charter_companies(company_name, slug, country, city, website, email, phone)")
       .eq("status", "active")
+      .eq("source", "samboat_sitemap") // Only Samboat boats — affiliate phase
       .limit(opts.limit || 30);
-
-    // Only show Samboat boats when SAMBOAT_ONLY=true (affiliate-phase setting)
-    if (process.env.SAMBOAT_ONLY === "true" || process.env.NEXT_PUBLIC_SAMBOAT_ONLY === "true") {
-      query = query.eq("source", "samboat_sitemap");
-    }
 
     if (opts.boatType) {
       const typeMap: Record<string, string[]> = {
@@ -531,12 +527,8 @@ export async function searchCharterCompanies(opts: {
     let query = db
       .from("charter_companies")
       .select("*")
+      .eq("slug", "samboat") // Only Samboat — affiliate phase
       .limit(opts.limit || 30);
-
-    // Samboat-only: show only the Samboat company row
-    if (process.env.SAMBOAT_ONLY === "true" || process.env.NEXT_PUBLIC_SAMBOAT_ONLY === "true") {
-      query = query.eq("slug", "samboat");
-    }
 
     // Location: OR across country/region/city/marina — same as boats search
     const locationTerms: string[] = [];
