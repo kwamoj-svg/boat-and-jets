@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Bookmark, BookmarkCheck, Loader2 } from "lucide-react";
+import { useT } from "@/lib/i18n/LanguageProvider";
 
 interface Props {
   query: string;
@@ -14,6 +15,7 @@ interface Props {
  * saved-searches list for one-click reuse.
  */
 export function SaveSearchButton({ query, filters, label }: Props) {
+  const { t } = useT();
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [needsLogin, setNeedsLogin] = useState(false);
@@ -41,7 +43,7 @@ export function SaveSearchButton({ query, filters, label }: Props) {
         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs hover:bg-amber-500/20 transition-colors"
       >
         <Bookmark className="w-3.5 h-3.5" />
-        Login zum Speichern
+        {t("crm.loginToSave")}
       </a>
     );
   }
@@ -58,7 +60,7 @@ export function SaveSearchButton({ query, filters, label }: Props) {
       }`}
     >
       <Icon className={`w-3.5 h-3.5 ${pending ? "animate-spin" : ""}`} />
-      {saved ? "Suche gespeichert" : "Suche speichern"}
+      {saved ? t("search.saved") : t("search.save")}
     </button>
   );
 }

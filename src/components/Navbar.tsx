@@ -7,6 +7,8 @@ import { Logo } from "./Logo";
 import { SearchInput } from "./SearchInput";
 import { AuthButton } from "./AuthButton";
 import { NotificationBell } from "./NotificationBell";
+import { LanguageSwitcher } from "./LanguageSwitcher";
+import { useT } from "@/lib/i18n/LanguageProvider";
 
 interface NavbarProps {
   showSearch?: boolean;
@@ -28,6 +30,7 @@ function navLinkClass(active: boolean): string {
 
 export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
   const pathname = usePathname() || "/";
+  const { t } = useT();
   const [partner, setPartner] = useState<PartnerState>({ isPartner: false, status: null });
 
   useEffect(() => {
@@ -63,16 +66,16 @@ export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
 
           <div className="flex items-center gap-5">
             <Link href="/charter" className={navLinkClass(isActive("/charter"))}>
-              Charter
+              {t("nav.charter")}
             </Link>
             <Link href="/sale" className={navLinkClass(isActive("/sale"))}>
-              Kaufen
+              {t("nav.buy")}
             </Link>
             <Link href="/network" className={navLinkClass(isActive("/network"))}>
-              Network
+              {t("nav.network")}
             </Link>
             <Link href="/crm" className={navLinkClass(isActive("/crm"))}>
-              CRM
+              {t("nav.crm")}
             </Link>
             {partner.isPartner ? (
               <Link
@@ -82,9 +85,9 @@ export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
                     ? "text-sm text-gold font-medium hidden sm:flex items-center gap-1.5 transition-colors relative after:absolute after:left-0 after:right-0 after:-bottom-[20px] after:h-0.5 after:bg-gold after:rounded-t"
                     : "text-sm text-gold/80 hover:text-gold transition-colors hidden sm:flex items-center gap-1.5"
                 }
-                title={partner.status === "approved" ? "Mein Unternehmen" : "Mein Unternehmen (Verifizierung läuft)"}
+                title={t("nav.myCompany")}
               >
-                Mein Unternehmen
+                {t("nav.myCompany")}
                 {partner.status === "pending" && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/20">
                     ●
@@ -96,9 +99,10 @@ export function Navbar({ showSearch = false, searchQuery }: NavbarProps) {
                 href="/partner/register"
                 className={navLinkClass(isActive("/partner"))}
               >
-                For Business
+                {t("nav.business")}
               </Link>
             )}
+            <LanguageSwitcher />
             <NotificationBell />
             <AuthButton />
           </div>

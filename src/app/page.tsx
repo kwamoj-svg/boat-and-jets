@@ -13,11 +13,13 @@ import { Waves, Shield, Sparkles, Globe, Loader2, Ship } from "lucide-react";
 import { Footer } from "@/components/Footer";
 import { CookieBanner } from "@/components/CookieBanner";
 import { SaveSearchButton } from "@/components/SaveSearchButton";
+import { useT } from "@/lib/i18n/LanguageProvider";
 import type { DestinationName } from "@/components/FilterBar";
 import type { ExtractedListing } from "@/lib/claude-ai";
 
 export default function Home() {
   const router = useRouter();
+  const { t } = useT();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [globeHighlight, setGlobeHighlight] = useState<DestinationName | null>(null);
   const [selectedDest, setSelectedDest] = useState<DestinationName | null>(null);
@@ -204,7 +206,7 @@ export default function Home() {
                 className="text-gray-400 text-lg sm:text-xl mb-8 font-light tracking-wide animate-fade-in"
                 style={{ animationDelay: "0.15s", opacity: 0 }}
               >
-                AI-Powered Yacht & Boat Discovery — veliqa.life
+                {t("home.tagline")}
               </p>
             </>
           )}
@@ -264,8 +266,8 @@ export default function Home() {
               <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
                 <h2 className="text-white text-lg font-light">
                   {searchDone
-                    ? `${listings.length} Ergebnisse für "${searchQuery}"`
-                    : `${listings.length} Ergebnisse bisher...`
+                    ? t("search.resultsFor", { n: listings.length, q: searchQuery })
+                    : t("search.resultsSoFar", { n: listings.length })
                   }
                 </h2>
                 <div className="flex items-center gap-3">
@@ -282,7 +284,7 @@ export default function Home() {
                       }}
                       className="text-sm text-gray-500 hover:text-gold transition-colors"
                     >
-                      Neue Suche
+                      {t("search.newSearch")}
                     </button>
                   )}
                 </div>
@@ -301,8 +303,8 @@ export default function Home() {
           <section className="px-4 sm:px-6 py-16">
             <div className="max-w-6xl mx-auto text-center">
               <Ship className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400 text-lg">Keine Ergebnisse für &quot;{searchQuery}&quot;</p>
-              <p className="text-gray-600 text-sm mt-2">Versuche einen anderen Suchbegriff</p>
+              <p className="text-gray-400 text-lg">{t("search.noResults", { q: searchQuery })}</p>
+              <p className="text-gray-600 text-sm mt-2">{t("search.tryOther")}</p>
             </div>
           </section>
         )}

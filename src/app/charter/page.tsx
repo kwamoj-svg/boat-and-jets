@@ -9,6 +9,7 @@ import {
   ChevronLeft, ChevronRight, Bed, SlidersHorizontal, ExternalLink,
 } from "lucide-react";
 import { getFallbackBoatImage } from "@/lib/boat-images";
+import { useT } from "@/lib/i18n/LanguageProvider";
 
 /* ─── Types ─── */
 
@@ -280,6 +281,7 @@ function SkeletonCard() {
 /* ─── Page ─── */
 
 export default function CharterCatalogPage() {
+  const { t } = useT();
   const [boats, setBoats] = useState<CharterBoat[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -351,11 +353,11 @@ export default function CharterCatalogPage() {
           <div className="flex items-center justify-center gap-3 mb-4">
             <Anchor className="w-8 h-8 text-gold" />
             <h1 className="text-3xl sm:text-4xl font-light text-white tracking-wide">
-              Charter Katalog
+              {t("charter.title")}
             </h1>
           </div>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            Entdecke {total > 0 ? `über ${total}` : ""} Boote von verifizierten Charter-Unternehmen weltweit
+            {t("charter.subtitle", { n: total })}
           </p>
         </div>
 
@@ -376,7 +378,7 @@ export default function CharterCatalogPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
                 type="text"
-                placeholder="Boot suchen..."
+                placeholder={t("charter.searchPlaceholder")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && fetchBoats()}
@@ -390,9 +392,9 @@ export default function CharterCatalogPage() {
               onChange={(e) => setBoatType(e.target.value)}
               className="bg-white/5 border border-white/10 rounded-lg text-white text-sm px-3 py-2.5 focus:outline-none focus:border-gold/30 appearance-none"
             >
-              {BOAT_TYPES.map((t) => (
-                <option key={t.value} value={t.value} className="bg-navy">
-                  {t.label}
+              {BOAT_TYPES.map((bt) => (
+                <option key={bt.value} value={bt.value} className="bg-navy">
+                  {bt.value ? t(`boat.type.${bt.value}`) : t("charter.allTypes")}
                 </option>
               ))}
             </select>
@@ -413,7 +415,7 @@ export default function CharterCatalogPage() {
             {/* Max Guests */}
             <input
               type="number"
-              placeholder="Max Gäste"
+              placeholder={t("charter.maxGuests")}
               min={1}
               max={100}
               value={maxGuests}
@@ -424,7 +426,7 @@ export default function CharterCatalogPage() {
             {/* Max Price */}
             <input
               type="number"
-              placeholder="Max EUR/Tag"
+              placeholder={t("charter.maxPricePerDay")}
               min={0}
               value={maxPrice}
               onChange={(e) => setMaxPrice(e.target.value)}
@@ -443,7 +445,7 @@ export default function CharterCatalogPage() {
               }`}
             >
               <Ship className="w-4 h-4" />
-              Nur mit Skipper
+              {t("charter.onlyWithSkipper")}
             </button>
 
             {(boatType || region || maxGuests || maxPrice || search || skipperOnly) && (
