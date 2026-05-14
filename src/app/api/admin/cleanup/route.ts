@@ -118,7 +118,13 @@ export async function GET(req: NextRequest) {
         .from("charter_boats")
         .update({ name: u.name })
         .eq("id", u.id);
-      if (!ue) report.namesFixed++;
+      if (!ue) {
+        report.namesFixed++;
+      } else if (ue.code === "23505" || /duplicate|unique/i.test(ue.message)) {
+        // Cleaned name collides with an already-cleaned row — delete this dupe
+        const { error: de } = await db.from("charter_boats").delete().eq("id", u.id);
+        if (!de) report.namesFixed++;
+      }
     }
 
     if (data.length < PAGE) break;
