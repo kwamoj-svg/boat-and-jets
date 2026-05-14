@@ -322,20 +322,36 @@ export async function GET(req: NextRequest) {
     return true;
   });
 
-  // Insert into DB, skipping conflicts
+  // Pre-fetch existing broker-lead source_urls so we skip dupes (we store in
+  // analytics_events because the dedicated broker_leads table isn't created yet).
+  const existing = await db
+    .from("analytics_events")
+    .select("entity_id")
+    .eq("event_type", "broker_lead");
+  const existingIds = new Set<string>(
+    ((existing.data as { entity_id: string | null }[] | null) || []).map((r) => r.entity_id || "")
+  );
+
   let inserted = 0;
   let lastError: string | null = null;
   for (const lead of unique) {
     if (!lead) continue;
-    // Skip very low quality
     if (lead.quality_score < 0.5) continue;
 
-    const { error } = await db.from("broker_leads").upsert(
-      {
+    // Stable hash-ish id — source_post_id or url-derived
+    const entityId = lead.source_post_id || lead.source_url.slice(-60);
+    if (existingIds.has(entityId)) continue;
+
+    const { error } = await db.from("analytics_events").insert({
+      event_type: "broker_lead",
+      entity_type: "broker_lead",
+      entity_id: entityId,
+      entity_name: [lead.brand, lead.model].filter(Boolean).join(" ") || "Boot",
+      country: lead.country,
+      properties: {
         intent: lead.intent,
         source_platform: lead.source_platform,
         source_url: lead.source_url,
-        source_post_id: lead.source_post_id,
         brand: lead.brand,
         model: lead.model,
         year: lead.year,
@@ -343,7 +359,6 @@ export async function GET(req: NextRequest) {
         asking_price: lead.asking_price,
         currency: lead.currency,
         location: lead.location,
-        country: lead.country,
         poster_handle: lead.poster_handle,
         contact_phone: lead.contact_phone,
         contact_email: lead.contact_email,
@@ -353,10 +368,11 @@ export async function GET(req: NextRequest) {
         quality_reasons: lead.quality_reasons,
         status: "new",
       },
-      { onConflict: "source_platform,source_post_id", ignoreDuplicates: true }
-    );
-    if (!error) inserted++;
-    else if (!lastError) lastError = error.message;
+    });
+    if (!error) {
+      inserted++;
+      existingIds.add(entityId);
+    } else if (!lastError) lastError = error.message;
   }
 
   return NextResponse.json({

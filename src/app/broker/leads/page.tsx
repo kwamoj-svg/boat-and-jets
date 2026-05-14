@@ -41,6 +41,15 @@ function platformIcon(p: string) {
   return <Globe className="w-4 h-4 text-gray-400" />;
 }
 
+interface AnalyticsEventRow {
+  id: string;
+  entity_id: string | null;
+  entity_name: string | null;
+  country: string | null;
+  properties: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export default async function BrokerLeadsPage() {
   const supabase = await createClient();
   const {
@@ -48,15 +57,40 @@ export default async function BrokerLeadsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?redirect=/broker/leads");
 
-  const { data: leads } = await supabase
-    .from("broker_leads")
-    .select("*")
-    .eq("status", "new")
-    .order("quality_score", { ascending: false })
+  // Broker leads are stored in analytics_events with event_type='broker_lead'
+  // (dedicated broker_leads table isn't created — fallback storage works fine).
+  const { data: rows } = await supabase
+    .from("analytics_events")
+    .select("id, entity_id, entity_name, country, properties, created_at")
+    .eq("event_type", "broker_lead")
     .order("created_at", { ascending: false })
     .limit(100);
 
-  const safeLeads = (leads as BrokerLead[] | null) ?? [];
+  const safeLeads: BrokerLead[] = ((rows as AnalyticsEventRow[] | null) ?? []).map((r) => {
+    const p = r.properties || {};
+    return {
+      id: r.id,
+      intent: String(p.intent || "sell"),
+      source_platform: String(p.source_platform || "web"),
+      source_url: String(p.source_url || ""),
+      brand: (p.brand as string | null) ?? null,
+      model: (p.model as string | null) ?? null,
+      year: (p.year as number | null) ?? null,
+      length_m: (p.length_m as number | null) ?? null,
+      asking_price: (p.asking_price as number | null) ?? null,
+      currency: String(p.currency || "EUR"),
+      location: (p.location as string | null) ?? null,
+      country: r.country,
+      poster_handle: (p.poster_handle as string | null) ?? null,
+      contact_phone: (p.contact_phone as string | null) ?? null,
+      contact_email: (p.contact_email as string | null) ?? null,
+      raw_text: (p.raw_text as string | null) ?? null,
+      quality_score: (p.quality_score as number | null) ?? null,
+      quality_reasons: (p.quality_reasons as string[] | null) ?? null,
+      status: String(p.status || "new"),
+      created_at: r.created_at,
+    };
+  });
 
   // Stats
   const byPlatform = safeLeads.reduce<Record<string, number>>((acc, l) => {

@@ -287,13 +287,19 @@ async function matchAlerts(
       if (c.min_length && Number(boat.length_m || 0) < Number(c.min_length)) continue;
       if (c.max_length && Number(boat.length_m || 99999) > Number(c.max_length)) continue;
 
-      const { error } = await db.from("alert_triggers").insert({
-        alert_id: alert.id,
+      // alert_triggers table not created — fallback to analytics_events
+      const { error } = await db.from("analytics_events").insert({
         user_id: alert.user_id,
-        match_kind: "sale",
-        matched_table: "sale_boats",
-        matched_id: boat.id,
-        snapshot: {
+        event_type: "alert_trigger",
+        entity_type: "sale_boat",
+        entity_id: String(boat.id),
+        entity_name: String(boat.name || ""),
+        country: boat.country ? String(boat.country) : null,
+        properties: {
+          alert_id: alert.id,
+          match_kind: "sale",
+          matched_table: "sale_boats",
+          matched_id: boat.id,
           name: boat.name,
           brand: boat.brand,
           model: boat.model,
