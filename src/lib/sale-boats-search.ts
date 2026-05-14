@@ -162,6 +162,9 @@ export async function searchSaleBoats(opts: {
       luxury_level: b.sale_price > 500000 ? 4 : b.sale_price > 100000 ? 3 : 2,
       verified: b.verified,
       is_sale: true,
+      condition: b.condition || undefined,
+      vat_included: b.vat_included,
+      hours_used: b.hours_used || undefined,
     } as unknown as ExtractedListing));
   } catch (err) {
     console.error("[searchSaleBoats] catch", err);
