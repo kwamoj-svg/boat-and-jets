@@ -10,38 +10,238 @@ export const maxDuration = 300;
  *
  * Trigger:  GET /api/cron/scrape-sale-boats
  *           Header: x-cron-secret: <secret>
- *           ?count=N  (default 6, max 15)
+ *           ?count=N  (default 12, max 40)
  */
 
-const SALE_PLATFORMS = [
-  { domain: "yachtworld.com", lang: "en" },
-  { domain: "boattrader.com", lang: "en" },
-  { domain: "yachtall.com", lang: "de" },
-  { domain: "boat24.com", lang: "de" },
-  { domain: "apolloduck.com", lang: "en" },
-  { domain: "scanboat.com", lang: "en" },
-  { domain: "boats.com", lang: "en" },
-  { domain: "yachtfocus.com", lang: "nl" },
-  { domain: "boatshop24.com", lang: "en" },
+// ═══════════════════════════════════════════════════════════
+// SALE-BOAT SOURCES — every meaningful platform globally
+// Used as a positive allowlist when filtering Serper results.
+// ═══════════════════════════════════════════════════════════
+const SALE_PLATFORMS: { domain: string; lang: string; kind: "marketplace" | "social" | "broker" | "forum" | "classifieds" | "auction" }[] = [
+  // ── Marketplaces (specialized yacht sale)
+  { domain: "yachtworld.com", lang: "en", kind: "marketplace" },
+  { domain: "boattrader.com", lang: "en", kind: "marketplace" },
+  { domain: "yachtall.com", lang: "de", kind: "marketplace" },
+  { domain: "boat24.com", lang: "de", kind: "marketplace" },
+  { domain: "apolloduck.com", lang: "en", kind: "marketplace" },
+  { domain: "scanboat.com", lang: "en", kind: "marketplace" },
+  { domain: "boats.com", lang: "en", kind: "marketplace" },
+  { domain: "yachtfocus.com", lang: "nl", kind: "marketplace" },
+  { domain: "boatshop24.com", lang: "en", kind: "marketplace" },
+  { domain: "yatco.com", lang: "en", kind: "marketplace" },
+  { domain: "denisonyachtsales.com", lang: "en", kind: "marketplace" },
+  { domain: "iyba.org", lang: "en", kind: "marketplace" },
+  { domain: "ancasta.com", lang: "en", kind: "marketplace" },
+  { domain: "yachtbroker.dk", lang: "da", kind: "marketplace" },
+  { domain: "yachtmagazin.de", lang: "de", kind: "marketplace" },
+  { domain: "12knots.com", lang: "en", kind: "marketplace" },
+  { domain: "boatdealers.ca", lang: "en", kind: "marketplace" },
+  { domain: "powerandmotoryacht.com", lang: "en", kind: "marketplace" },
+  { domain: "sea-magazine.com", lang: "en", kind: "marketplace" },
+  { domain: "yachtport.eu", lang: "en", kind: "marketplace" },
+  { domain: "annoncesbateaux.com", lang: "fr", kind: "marketplace" },
+  { domain: "bateaux-occasion.fr", lang: "fr", kind: "marketplace" },
+  { domain: "youboat.fr", lang: "fr", kind: "marketplace" },
+  { domain: "barcoamigo.com", lang: "es", kind: "marketplace" },
+  { domain: "nauticexpo.com", lang: "en", kind: "marketplace" },
+  { domain: "topboats.com", lang: "es", kind: "marketplace" },
+  { domain: "yachtonline.com", lang: "it", kind: "marketplace" },
+  { domain: "barchedoccasione.it", lang: "it", kind: "marketplace" },
+  { domain: "godryad.com", lang: "en", kind: "marketplace" },
+
+  // ── Classifieds / general marketplaces
+  { domain: "ebay-kleinanzeigen.de", lang: "de", kind: "classifieds" },
+  { domain: "kleinanzeigen.de", lang: "de", kind: "classifieds" },
+  { domain: "quoka.de", lang: "de", kind: "classifieds" },
+  { domain: "ebay.com", lang: "en", kind: "classifieds" },
+  { domain: "ebay.de", lang: "de", kind: "classifieds" },
+  { domain: "ebay.co.uk", lang: "en", kind: "classifieds" },
+  { domain: "leboncoin.fr", lang: "fr", kind: "classifieds" },
+  { domain: "milanuncios.com", lang: "es", kind: "classifieds" },
+  { domain: "subito.it", lang: "it", kind: "classifieds" },
+  { domain: "gumtree.com", lang: "en", kind: "classifieds" },
+  { domain: "marktplaats.nl", lang: "nl", kind: "classifieds" },
+  { domain: "olx.pl", lang: "pl", kind: "classifieds" },
+  { domain: "blocket.se", lang: "sv", kind: "classifieds" },
+  { domain: "finn.no", lang: "no", kind: "classifieds" },
+  { domain: "dba.dk", lang: "da", kind: "classifieds" },
+  { domain: "willhaben.at", lang: "de", kind: "classifieds" },
+  { domain: "tutti.ch", lang: "de", kind: "classifieds" },
+  { domain: "anibis.ch", lang: "de", kind: "classifieds" },
+  { domain: "craigslist.org", lang: "en", kind: "classifieds" },
+
+  // ── Auction houses
+  { domain: "bandb-yachts.com", lang: "en", kind: "auction" },
+  { domain: "bonhams.com", lang: "en", kind: "auction" },
+  { domain: "bringatrailer.com", lang: "en", kind: "auction" },
+
+  // ── Broker websites
+  { domain: "northropandjohnson.com", lang: "en", kind: "broker" },
+  { domain: "fraseryachts.com", lang: "en", kind: "broker" },
+  { domain: "burgessyachts.com", lang: "en", kind: "broker" },
+  { domain: "edmiston.com", lang: "en", kind: "broker" },
+  { domain: "ycoss.com", lang: "en", kind: "broker" },
+  { domain: "yachtcharterfleet.com", lang: "en", kind: "broker" },
+  { domain: "imperial-yachts.com", lang: "en", kind: "broker" },
+  { domain: "moranyachts.com", lang: "en", kind: "broker" },
+  { domain: "camperandnicholsons.com", lang: "en", kind: "broker" },
+  { domain: "iyc.com", lang: "en", kind: "broker" },
+  { domain: "yachtbrokers.com.au", lang: "en", kind: "broker" },
+
+  // ── Forums (often sell-by-owner threads)
+  { domain: "boote-forum.de", lang: "de", kind: "forum" },
+  { domain: "segelfreunde.de", lang: "de", kind: "forum" },
+  { domain: "cruisersforum.com", lang: "en", kind: "forum" },
+  { domain: "sailboatowners.com", lang: "en", kind: "forum" },
+  { domain: "sailinganarchy.com", lang: "en", kind: "forum" },
+  { domain: "boatdesign.net", lang: "en", kind: "forum" },
+  { domain: "trawlerforum.com", lang: "en", kind: "forum" },
+
+  // ── Social media
+  { domain: "facebook.com", lang: "en", kind: "social" },
+  { domain: "instagram.com", lang: "en", kind: "social" },
+  { domain: "linkedin.com", lang: "en", kind: "social" },
+  { domain: "twitter.com", lang: "en", kind: "social" },
+  { domain: "x.com", lang: "en", kind: "social" },
+  { domain: "reddit.com", lang: "en", kind: "social" },
+  { domain: "youtube.com", lang: "en", kind: "social" },
+  { domain: "tiktok.com", lang: "en", kind: "social" },
+  { domain: "pinterest.com", lang: "en", kind: "social" },
 ];
 
-// Search categories to rotate through
+// ═══════════════════════════════════════════════════════════
+// QUERIES — rotate through these per cron run
+// Covers: language variants, brand-specific, type-specific,
+// social-media intent, regional, broker-specific.
+// ═══════════════════════════════════════════════════════════
 const SCRAPE_QUERIES = [
+  // Generic sale phrases — global
   { type: "motorboat", q: "motor yacht for sale Mediterranean" },
   { type: "sailboat", q: "sailing yacht for sale Europe" },
   { type: "catamaran", q: "catamaran for sale" },
+  { type: "yacht", q: "superyacht for sale" },
+  { type: "yacht", q: "luxury yacht for sale" },
+  { type: "motorboat", q: "yacht broker listing 2025" },
+
+  // German
   { type: "motorboat", q: "Motoryacht zu verkaufen" },
   { type: "sailboat", q: "Segelyacht zu verkaufen Deutschland" },
-  { type: "yacht", q: "superyacht for sale" },
+  { type: "catamaran", q: "Katamaran kaufen gebraucht" },
+  { type: "yacht", q: "Yacht zu verkaufen Mittelmeer" },
+  { type: "motorboat", q: "Motorboot kaufen Privat" },
+
+  // French
+  { type: "motorboat", q: "yacht à vendre Méditerranée" },
+  { type: "sailboat", q: "voilier à vendre occasion" },
+  { type: "catamaran", q: "catamaran à vendre Antilles" },
+
+  // Spanish / Italian
+  { type: "motorboat", q: "yate en venta España" },
+  { type: "sailboat", q: "velero en venta usado" },
+  { type: "motorboat", q: "yacht in vendita Italia" },
+  { type: "sailboat", q: "barca a vela in vendita" },
+
+  // Brand-specific (top European/global brands)
   { type: "motorboat", q: "Sunseeker for sale" },
   { type: "motorboat", q: "Princess Yachts for sale" },
   { type: "motorboat", q: "Azimut for sale" },
-  { type: "motorboat", q: "Ferretti for sale" },
+  { type: "motorboat", q: "Ferretti yacht for sale" },
+  { type: "motorboat", q: "Pershing yacht for sale" },
+  { type: "motorboat", q: "Riva yacht for sale" },
+  { type: "motorboat", q: "Sanlorenzo for sale" },
+  { type: "motorboat", q: "Benetti yacht for sale" },
+  { type: "motorboat", q: "Custom Line yacht for sale" },
+  { type: "motorboat", q: "Fairline for sale" },
+  { type: "motorboat", q: "Galeon yacht for sale" },
+  { type: "motorboat", q: "Prestige yacht for sale" },
+  { type: "motorboat", q: "Absolute Yachts for sale" },
+  { type: "motorboat", q: "Cranchi for sale" },
   { type: "sailboat", q: "Beneteau Oceanis for sale" },
   { type: "sailboat", q: "Jeanneau Sun Odyssey for sale" },
+  { type: "sailboat", q: "Bavaria sailing yacht for sale" },
+  { type: "sailboat", q: "Hanse yacht for sale" },
+  { type: "sailboat", q: "Dufour yacht for sale" },
+  { type: "sailboat", q: "Hallberg Rassy for sale" },
+  { type: "sailboat", q: "X-Yachts for sale" },
+  { type: "sailboat", q: "Oyster yacht for sale" },
   { type: "catamaran", q: "Lagoon catamaran for sale" },
   { type: "catamaran", q: "Bali catamaran for sale" },
-  { type: "yacht", q: "Sanlorenzo for sale" },
+  { type: "catamaran", q: "Fountaine Pajot for sale" },
+  { type: "catamaran", q: "Leopard catamaran for sale" },
+  { type: "catamaran", q: "Sunreef catamaran for sale" },
+  { type: "catamaran", q: "Nautitech for sale" },
+
+  // Social media — Facebook Marketplace
+  { type: "motorboat", q: 'site:facebook.com/marketplace yacht for sale' },
+  { type: "sailboat", q: 'site:facebook.com/marketplace sailboat for sale' },
+  { type: "catamaran", q: 'site:facebook.com/marketplace catamaran for sale' },
+  { type: "motorboat", q: 'site:facebook.com/marketplace motoryacht zu verkaufen' },
+  { type: "motorboat", q: 'site:facebook.com "yacht for sale" 2025' },
+  { type: "sailboat", q: 'site:facebook.com "sailboat for sale by owner"' },
+
+  // Instagram (hashtags & captions)
+  { type: "motorboat", q: 'site:instagram.com "#yachtforsale"' },
+  { type: "motorboat", q: 'site:instagram.com "#boatforsale"' },
+  { type: "sailboat", q: 'site:instagram.com "#sailingyachtforsale"' },
+  { type: "catamaran", q: 'site:instagram.com "#catamaranforsale"' },
+  { type: "yacht", q: 'site:instagram.com "#superyachtforsale"' },
+  { type: "motorboat", q: 'site:instagram.com "for sale" yacht 2025' },
+
+  // LinkedIn (broker posts)
+  { type: "motorboat", q: 'site:linkedin.com "yacht for sale" 2025' },
+  { type: "motorboat", q: 'site:linkedin.com "now available" yacht broker' },
+  { type: "motorboat", q: 'site:linkedin.com "price reduced" yacht' },
+  { type: "sailboat", q: 'site:linkedin.com "new listing" sailing yacht' },
+
+  // Reddit
+  { type: "motorboat", q: 'site:reddit.com/r/sailing "for sale"' },
+  { type: "motorboat", q: 'site:reddit.com/r/boating "selling"' },
+  { type: "motorboat", q: 'site:reddit.com/r/yachting "for sale"' },
+  { type: "motorboat", q: 'site:reddit.com/r/Catamaran "for sale"' },
+  { type: "sailboat", q: 'site:reddit.com "sailboat for sale" 2025' },
+
+  // X / Twitter
+  { type: "motorboat", q: 'site:x.com "yacht for sale" 2025' },
+  { type: "motorboat", q: 'site:twitter.com "for sale by owner" yacht' },
+
+  // YouTube (yacht-tour channels often list)
+  { type: "motorboat", q: 'site:youtube.com "yacht tour" "for sale"' },
+  { type: "sailboat", q: 'site:youtube.com "sailing yacht tour" "for sale"' },
+  { type: "catamaran", q: 'site:youtube.com "catamaran tour" "for sale"' },
+
+  // TikTok
+  { type: "motorboat", q: 'site:tiktok.com yachtforsale' },
+
+  // Classifieds (German)
+  { type: "motorboat", q: 'site:kleinanzeigen.de motoryacht verkaufen' },
+  { type: "sailboat", q: 'site:kleinanzeigen.de segelyacht' },
+  { type: "motorboat", q: 'site:ebay-kleinanzeigen.de motorboot' },
+  { type: "motorboat", q: 'site:quoka.de yacht verkaufen' },
+
+  // Classifieds (French / Spanish / Italian / Dutch / Nordic)
+  { type: "motorboat", q: 'site:leboncoin.fr yacht à vendre' },
+  { type: "sailboat", q: 'site:leboncoin.fr voilier à vendre' },
+  { type: "motorboat", q: 'site:milanuncios.com yate venta' },
+  { type: "motorboat", q: 'site:subito.it barca vendita' },
+  { type: "motorboat", q: 'site:marktplaats.nl jacht te koop' },
+  { type: "motorboat", q: 'site:finn.no båt til salgs' },
+  { type: "motorboat", q: 'site:blocket.se båt till salu' },
+  { type: "motorboat", q: 'site:dba.dk båd til salg' },
+  { type: "motorboat", q: 'site:willhaben.at motorboot verkaufen' },
+
+  // Forums
+  { type: "sailboat", q: 'site:cruisersforum.com "for sale by owner"' },
+  { type: "motorboat", q: 'site:boote-forum.de "verkaufe meine"' },
+  { type: "sailboat", q: 'site:sailboatowners.com classifieds' },
+  { type: "motorboat", q: 'site:trawlerforum.com for sale' },
+
+  // Luxury / regional
+  { type: "yacht", q: "yacht for sale Monaco" },
+  { type: "yacht", q: "yacht for sale Dubai" },
+  { type: "yacht", q: "yacht for sale Antibes" },
+  { type: "yacht", q: "yacht for sale Palma" },
+  { type: "yacht", q: "yacht for sale Fort Lauderdale" },
+  { type: "yacht", q: "yacht for sale Miami" },
 ];
 
 function getServiceDb(): SupabaseClient | null {
@@ -61,20 +261,35 @@ async function serperSearch(q: string, limit = 10): Promise<SerperResult[]> {
   const key = process.env.SERPER_API_KEY;
   if (!key) return [];
   try {
-    const platformFilter = SALE_PLATFORMS
-      .map((p) => `site:${p.domain}`)
-      .join(" OR ");
+    // If the query already has `site:` operator, trust it. Otherwise scope to
+    // a SHORT list of high-priority marketplaces (Google rejects 80-domain ORs).
+    const hasSiteOp = /\bsite:/i.test(q);
+    let finalQ = q;
+    if (!hasSiteOp) {
+      const top = SALE_PLATFORMS
+        .filter((p) => p.kind === "marketplace" || p.kind === "broker")
+        .slice(0, 15)
+        .map((p) => `site:${p.domain}`)
+        .join(" OR ");
+      finalQ = `${q} (${top})`;
+    }
     const res = await fetch("https://google.serper.dev/search", {
       method: "POST",
       headers: { "X-API-KEY": key, "Content-Type": "application/json" },
-      body: JSON.stringify({ q: `${q} (${platformFilter})`, num: limit }),
+      body: JSON.stringify({ q: finalQ, num: limit }),
     });
     if (!res.ok) return [];
     const data = await res.json();
+    // Accept anything from a known platform OR with a recognizable yacht keyword.
+    // (Social-media URLs are kept regardless — we filter junk later via the parser.)
     return (data.organic || []).filter((r: SerperResult) => {
       try {
         const host = new URL(r.link).hostname.replace("www.", "");
-        return SALE_PLATFORMS.some((p) => host.includes(p.domain));
+        if (SALE_PLATFORMS.some((p) => host.includes(p.domain))) return true;
+        // For unknown domains, require yacht/boat/sale signal in title or snippet
+        const text = `${r.title} ${r.snippet || ""}`.toLowerCase();
+        return /yacht|boat|sail|catamaran|motoryacht|segelyacht|boot|barca|bateau|velero/.test(text)
+          && /for sale|zu verkaufen|à vendre|en venta|in vendita|te koop/.test(text);
       } catch {
         return false;
       }
@@ -109,7 +324,8 @@ function parseSerperResult(r: SerperResult, fallbackType: string): {
 
   let domain = "";
   try { domain = new URL(r.link).hostname.replace("www.", ""); } catch { return null; }
-  if (!SALE_PLATFORMS.some((p) => domain.includes(p.domain))) return null;
+  // Accept any domain — we want social-media + niche broker sites too.
+  // Junk gets filtered by the requireSalePrice check below.
 
   const text = `${r.title} ${r.snippet || ""}`;
 
@@ -208,14 +424,25 @@ async function processQuery(
   if (results.length === 0) return { scraped: 0, inserted: 0 };
 
   let inserted = 0;
+  const SOCIAL_DOMAINS = ["facebook.com", "instagram.com", "linkedin.com", "twitter.com", "x.com", "reddit.com", "youtube.com", "tiktok.com", "pinterest.com"];
+  const CLASSIFIEDS_DOMAINS = ["kleinanzeigen.de", "ebay-kleinanzeigen.de", "leboncoin.fr", "milanuncios.com", "subito.it", "marktplaats.nl"];
+
   for (const r of results) {
     const parsed = parseSerperResult(r, spec.type);
-    if (!parsed || !parsed.sale_price) continue; // require a price
+    if (!parsed) continue;
 
     let domain = "";
     try { domain = new URL(r.link).hostname.replace("www.", ""); } catch { continue; }
 
-    const slug = slugify(`${parsed.brand || ""}-${parsed.model || ""}-${parsed.year || ""}-${domain}`);
+    const isSocial = SOCIAL_DOMAINS.some((d) => domain.includes(d));
+    const isClassifieds = CLASSIFIEDS_DOMAINS.some((d) => domain.includes(d));
+
+    // For specialized marketplaces: REQUIRE a price (otherwise data quality is junk).
+    // For social media / classifieds / forums: accept without price (Preis auf Anfrage).
+    if (!parsed.sale_price && !isSocial && !isClassifieds) continue;
+    const finalPrice = parsed.sale_price ?? 0; // 0 = on request
+
+    const slug = slugify(`${parsed.brand || ""}-${parsed.model || ""}-${parsed.year || ""}-${domain}-${r.link.slice(-12)}`);
 
     const row = {
       name: parsed.name,
@@ -225,7 +452,7 @@ async function processQuery(
       model: parsed.model,
       year: parsed.year,
       length_m: parsed.length_m,
-      sale_price: parsed.sale_price,
+      sale_price: finalPrice,
       currency: parsed.currency,
       location: parsed.location,
       country: parsed.country,
@@ -235,7 +462,8 @@ async function processQuery(
       description: parsed.description.slice(0, 500),
       detail_url: r.link,
       source_domain: domain,
-      source: "auto_scrape",
+      source: isSocial ? "social_media" : isClassifieds ? "classifieds" : "marketplace",
+      price_negotiable: !parsed.sale_price,
       status: "active",
       verified: false,
     };
@@ -328,7 +556,7 @@ export async function GET(req: NextRequest) {
   const db = getServiceDb();
   if (!db) return NextResponse.json({ error: "DB not configured" }, { status: 500 });
 
-  const count = Math.min(Math.max(1, parseInt(req.nextUrl.searchParams.get("count") || "6")), 15);
+  const count = Math.min(Math.max(1, parseInt(req.nextUrl.searchParams.get("count") || "12")), 40);
   const startAtParam = req.nextUrl.searchParams.get("startAt");
   const hour = new Date().getUTCHours();
   const startIdx =
