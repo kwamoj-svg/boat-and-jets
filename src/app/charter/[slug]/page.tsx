@@ -7,6 +7,8 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { AddToCrmButton } from "@/components/AddToCrmButton";
 import { getFallbackBoatImage } from "@/lib/boat-images";
+import { localizedBoataroundUrlClient } from "@/lib/boataround-url";
+import { useT } from "@/lib/i18n/LanguageProvider";
 import type { ExtractedListing } from "@/lib/claude-ai";
 import {
   Anchor, Ship, MapPin, Users, Ruler, Star, Phone, Mail,
@@ -132,6 +134,7 @@ function StarRating({ rating }: { rating: number }) {
 export default function BoatDetailPage() {
   const params = useParams();
   const slug = typeof params.slug === "string" ? params.slug : "";
+  const { locale } = useT();
 
   const [boat, setBoat] = useState<BoatDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -279,7 +282,7 @@ export default function BoatDetailPage() {
             )}
             {boat.detail_url && (
               <a
-                href={boat.detail_url}
+                href={localizedBoataroundUrlClient(boat.detail_url, locale) || boat.detail_url}
                 target="_blank"
                 rel="noopener noreferrer sponsored"
                 className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-gold to-gold-light text-navy text-sm font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-gold/20"
@@ -293,7 +296,7 @@ export default function BoatDetailPage() {
               variant="full"
               listing={{
                 name: boat.name,
-                source_url: boat.detail_url || `https://veliqa.life/charter/${boat.slug}`,
+                source_url: localizedBoataroundUrlClient(boat.detail_url, locale) || boat.detail_url || `https://veliqa.life/charter/${boat.slug}`,
                 image_url: boat.images?.[0] || null,
                 type: boat.boat_type,
                 brand: boat.brand,
@@ -515,16 +518,16 @@ export default function BoatDetailPage() {
                   Buchung erfolgt direkt beim Anbieter — sichere Zahlung, sofortige Bestätigung.
                 </p>
                 <a
-                  href={boat.detail_url}
+                  href={localizedBoataroundUrlClient(boat.detail_url, locale) || boat.detail_url}
                   target="_blank"
                   rel="noopener noreferrer sponsored"
                   className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-gold to-gold-light text-navy font-semibold text-sm hover:opacity-90 transition-opacity w-full"
                 >
                   <Calendar className="w-4 h-4" />
-                  Jetzt buchen bei {boat.source === "samboat_sitemap" ? "Samboat" : (() => { try { return new URL(boat.detail_url!).hostname.replace("www.", "").split(".")[0]; } catch { return "Anbieter"; } })()}
+                  Jetzt buchen bei {boat.source === "boataround_sitemap" ? "Boataround" : boat.source === "samboat_sitemap" ? "Samboat" : (() => { try { return new URL(boat.detail_url!).hostname.replace("www.", "").split(".")[0]; } catch { return "Anbieter"; } })()}
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
-                {boat.source === "samboat_sitemap" && (
+                {(boat.source === "boataround_sitemap" || boat.source === "samboat_sitemap") && (
                   <p className="text-[10px] text-gray-500 mt-2 text-center">
                     Affiliate-Partner — VELIQA erhält ggf. eine Provision
                   </p>

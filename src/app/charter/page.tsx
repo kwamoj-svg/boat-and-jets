@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { getFallbackBoatImage } from "@/lib/boat-images";
 import { useT } from "@/lib/i18n/LanguageProvider";
+import { localizedBoataroundUrlClient } from "@/lib/boataround-url";
 
 /* ─── Types ─── */
 
@@ -101,11 +102,14 @@ function BoatTypeBadge({ type }: { type: string }) {
 }
 
 function BoatCard({ boat }: { boat: CharterBoat }) {
+  const { locale } = useT();
   const company = boat.charter_companies;
   const ownImg = boat.images && boat.images.length > 0 ? boat.images[0] : null;
   const imgSrc = ownImg || getFallbackBoatImage(boat.boat_type, boat.slug || boat.name);
-  const bookingHref = boat.detail_url || `/charter/${boat.slug}`;
-  const isExternal = !!boat.detail_url;
+  // Transform Boataround URLs to the current locale's path (boot/boat/bateau/...)
+  const externalUrl = localizedBoataroundUrlClient(boat.detail_url, locale);
+  const bookingHref = externalUrl || `/charter/${boat.slug}`;
+  const isExternal = !!externalUrl;
   const linkProps = isExternal
     ? { href: bookingHref, target: "_blank", rel: "noopener noreferrer sponsored" as const }
     : { href: bookingHref };
