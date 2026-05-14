@@ -8,6 +8,7 @@ import {
   Anchor, Ship, MapPin, Users, Ruler, Search, Filter,
   ChevronLeft, ChevronRight, Bed, SlidersHorizontal, ExternalLink,
 } from "lucide-react";
+import { getFallbackBoatImage } from "@/lib/boat-images";
 
 /* ─── Types ─── */
 
@@ -55,15 +56,15 @@ const BOAT_TYPES = [
 
 const REGIONS = [
   { value: "", label: "Alle Regionen" },
-  { value: "Kroatien", label: "Kroatien" },
-  { value: "Griechenland", label: "Griechenland" },
-  { value: "Türkei", label: "Turkei" },
-  { value: "Italien", label: "Italien" },
-  { value: "Spanien", label: "Spanien" },
-  { value: "Frankreich", label: "Frankreich" },
+  { value: "Croatia", label: "Kroatien" },
+  { value: "Greece", label: "Griechenland" },
+  { value: "Turkey", label: "Türkei" },
+  { value: "Italy", label: "Italien" },
+  { value: "Spain", label: "Spanien" },
+  { value: "France", label: "Frankreich" },
   { value: "Montenegro", label: "Montenegro" },
   { value: "Thailand", label: "Thailand" },
-  { value: "Karibik", label: "Karibik" },
+  { value: "Caribbean", label: "Karibik" },
 ];
 
 const TYPE_LABELS: Record<string, string> = {
@@ -100,7 +101,8 @@ function BoatTypeBadge({ type }: { type: string }) {
 
 function BoatCard({ boat }: { boat: CharterBoat }) {
   const company = boat.charter_companies;
-  const hasImage = boat.images && boat.images.length > 0;
+  const ownImg = boat.images && boat.images.length > 0 ? boat.images[0] : null;
+  const imgSrc = ownImg || getFallbackBoatImage(boat.boat_type, boat.slug || boat.name);
   const bookingHref = boat.detail_url || `/charter/${boat.slug}`;
   const isExternal = !!boat.detail_url;
   const linkProps = isExternal
@@ -109,19 +111,14 @@ function BoatCard({ boat }: { boat: CharterBoat }) {
 
   return (
     <div className="glass rounded-2xl border border-white/10 hover:border-gold/20 transition-all duration-300 group overflow-hidden flex flex-col">
-      {/* Image / Gradient — clickable to booking page */}
+      {/* Image — fallback by boat type when no own photo */}
       <a {...linkProps} className="relative h-48 overflow-hidden block">
-        {hasImage ? (
-          <img
-            src={boat.images[0]}
-            alt={boat.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-navy-light via-navy to-gold/10 flex items-center justify-center">
-            <Ship className="w-12 h-12 text-white/10" />
-          </div>
-        )}
+        <img
+          src={imgSrc}
+          alt={boat.name}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          loading="lazy"
+        />
         <div className="absolute top-3 left-3">
           <BoatTypeBadge type={boat.boat_type} />
         </div>

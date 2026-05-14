@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { AddToCrmButton } from "@/components/AddToCrmButton";
+import { getFallbackBoatImage } from "@/lib/boat-images";
 import type { ExtractedListing } from "@/lib/claude-ai";
 import {
   Anchor, Ship, MapPin, Users, Ruler, Star, Phone, Mail,
@@ -222,9 +223,11 @@ export default function BoatDetailPage() {
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-navy-light via-navy to-gold/10 flex items-center justify-center">
-                <Ship className="w-16 h-16 text-white/10" />
-              </div>
+              <img
+                src={getFallbackBoatImage(boat.boat_type, boat.slug || boat.name)}
+                alt={boat.name}
+                className="w-full h-full object-cover"
+              />
             )}
           </div>
 

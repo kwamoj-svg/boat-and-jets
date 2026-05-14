@@ -169,7 +169,11 @@ async function handleGet(req: NextRequest) {
 
     if (type) query = query.eq("boat_type", type);
     if (country) query = query.ilike("country", `%${country}%`);
-    if (region) query = query.ilike("region", `%${region}%`);
+    // Region filter: many Samboat boats only have `country` set, so OR across both
+    if (region) {
+      const safe = region.replace(/[(),%]/g, "");
+      query = query.or(`region.ilike.%${safe}%,country.ilike.%${safe}%,base_port.ilike.%${safe}%`);
+    }
     if (minGuests) query = query.gte("max_guests", parseInt(minGuests));
     if (maxPrice) query = query.lte("price_per_day", parseFloat(maxPrice));
     if (brand) query = query.ilike("brand", `%${brand}%`);
