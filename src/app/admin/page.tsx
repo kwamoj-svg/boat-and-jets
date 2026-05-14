@@ -62,8 +62,29 @@ interface PendingPartner {
   created_at: string;
 }
 
+interface OverviewData {
+  totals: {
+    charterBoats: number;
+    samboatBoats: number;
+    boatsWithPrice: number;
+    saleBoats: number;
+    companies: number;
+    partners: number;
+    pendingPartners: number;
+    crmEntries: number;
+    brokerLeads: number;
+  };
+  byCountry: { country: string; count: number }[];
+  byType: { type: string; count: number }[];
+  recentScrapes: { targets: string[]; scraped: number; inserted: number; created_at: string }[];
+  recentLeads: { entity_name: string; country: string | null; metadata: Record<string, unknown>; created_at: string }[];
+  searchesLast24h: number;
+  topSearches: { query: string; count: number }[];
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [overview, setOverview] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingList, setPendingList] = useState<PendingPartner[]>([]);
   const [actionPending, setActionPending] = useState<string | null>(null);

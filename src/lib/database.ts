@@ -346,7 +346,7 @@ export async function searchCharterBoats(opts: {
       .from("charter_boats")
       .select("*, charter_companies(company_name, slug, country, city, website, email, phone)")
       .eq("status", "active")
-      .eq("source", "samboat_sitemap") // Only Samboat boats — affiliate phase
+      .eq("source", "boataround_sitemap") // Only Boataround boats — affiliate phase
       .limit(opts.limit || 30);
 
     if (opts.boatType) {
@@ -527,7 +527,7 @@ export async function searchCharterCompanies(opts: {
     let query = db
       .from("charter_companies")
       .select("*")
-      .eq("slug", "samboat") // Only Samboat — affiliate phase
+      .eq("slug", "boataround") // Only Boataround — affiliate phase
       .limit(opts.limit || 30);
 
     // Location: OR across country/region/city/marina — same as boats search

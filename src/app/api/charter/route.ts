@@ -121,7 +121,7 @@ async function handleGet(req: NextRequest) {
     let query = db
       .from("charter_companies")
       .select("*", { count: "exact" })
-      .eq("slug", "samboat") // Only the Samboat company — affiliate phase
+      .eq("slug", "boataround") // Only the Boataround company — affiliate phase
       .order("featured", { ascending: false })
       .order("rating", { ascending: false, nullsFirst: false })
       .range(from, from + limit - 1);
@@ -163,7 +163,7 @@ async function handleGet(req: NextRequest) {
       .from("charter_boats")
       .select("*, charter_companies(company_name, slug, country)", { count: "exact" })
       .eq("status", "active")
-      .eq("source", "samboat_sitemap") // Only Samboat boats — affiliate phase
+      .eq("source", "boataround_sitemap") // Only Boataround boats — affiliate phase
       .order("price_per_day", { ascending: true, nullsFirst: false })
       .range(from, from + limit - 1);
 
