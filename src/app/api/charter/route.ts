@@ -168,11 +168,15 @@ async function handleGet(req: NextRequest) {
       .range(from, from + limit - 1);
 
     if (type) query = query.eq("boat_type", type);
-    if (country) query = query.ilike("country", `%${country}%`);
-    // Region filter: many Samboat boats only have `country` set, so OR across both
+    // Country / region filter — Boataround sitemap entries have NULL country,
+    // so we include both real matches AND NULL-country rows so they're visible.
+    if (country) {
+      const safe = country.replace(/[(),%]/g, "");
+      query = query.or(`country.ilike.%${safe}%,region.ilike.%${safe}%,base_port.ilike.%${safe}%,name.ilike.%${safe}%,country.is.null`);
+    }
     if (region) {
       const safe = region.replace(/[(),%]/g, "");
-      query = query.or(`region.ilike.%${safe}%,country.ilike.%${safe}%,base_port.ilike.%${safe}%`);
+      query = query.or(`region.ilike.%${safe}%,country.ilike.%${safe}%,base_port.ilike.%${safe}%,name.ilike.%${safe}%,country.is.null`);
     }
     if (minGuests) query = query.gte("max_guests", parseInt(minGuests));
     if (maxPrice) query = query.lte("price_per_day", parseFloat(maxPrice));

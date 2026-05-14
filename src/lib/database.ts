@@ -384,14 +384,19 @@ export async function searchCharterBoats(opts: {
     if (opts.city && !locationTerms.includes(opts.city)) locationTerms.push(opts.city);
 
     if (locationTerms.length > 0) {
-      const orParts = locationTerms.flatMap((t) => {
+      const orParts: string[] = [];
+      for (const t of locationTerms) {
         const safe = t.replace(/[(),%]/g, ""); // sanitize for PostgREST or-string
-        return [
-          `country.ilike.%${safe}%`,
-          `region.ilike.%${safe}%`,
-          `base_port.ilike.%${safe}%`,
-        ];
-      });
+        orParts.push(`country.ilike.%${safe}%`);
+        orParts.push(`region.ilike.%${safe}%`);
+        orParts.push(`base_port.ilike.%${safe}%`);
+        orParts.push(`name.ilike.%${safe}%`);
+        orParts.push(`description.ilike.%${safe}%`);
+      }
+      // Tolerance: also include rows with no location data at all (NULL country)
+      // — Boataround sitemap entries don't carry country/region. We rank these
+      // lower in postProcess, but at least they appear.
+      orParts.push("country.is.null");
       query = query.or(orParts.join(","));
     }
     if (opts.guests) {
