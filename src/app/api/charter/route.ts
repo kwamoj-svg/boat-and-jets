@@ -125,6 +125,11 @@ async function handleGet(req: NextRequest) {
       .order("rating", { ascending: false, nullsFirst: false })
       .range(from, from + limit - 1);
 
+    // Samboat-only: show only the Samboat company row
+    if (process.env.SAMBOAT_ONLY === "true" || process.env.NEXT_PUBLIC_SAMBOAT_ONLY === "true") {
+      query = query.eq("slug", "samboat");
+    }
+
     if (country) query = query.ilike("country", `%${country}%`);
     if (region) query = query.ilike("region", `%${region}%`);
     if (minRating) query = query.gte("rating", parseFloat(minRating));
@@ -164,6 +169,11 @@ async function handleGet(req: NextRequest) {
       .eq("status", "active")
       .order("price_per_day", { ascending: true, nullsFirst: false })
       .range(from, from + limit - 1);
+
+    // Samboat-only filter (affiliate phase) — toggle via env var
+    if (process.env.SAMBOAT_ONLY === "true" || process.env.NEXT_PUBLIC_SAMBOAT_ONLY === "true") {
+      query = query.eq("source", "samboat_sitemap");
+    }
 
     if (type) query = query.eq("boat_type", type);
     if (country) query = query.ilike("country", `%${country}%`);

@@ -348,6 +348,11 @@ export async function searchCharterBoats(opts: {
       .eq("status", "active")
       .limit(opts.limit || 30);
 
+    // Only show Samboat boats when SAMBOAT_ONLY=true (affiliate-phase setting)
+    if (process.env.SAMBOAT_ONLY === "true" || process.env.NEXT_PUBLIC_SAMBOAT_ONLY === "true") {
+      query = query.eq("source", "samboat_sitemap");
+    }
+
     if (opts.boatType) {
       const typeMap: Record<string, string[]> = {
         motor: ["motorboat", "yacht", "speedboat"],
@@ -527,6 +532,11 @@ export async function searchCharterCompanies(opts: {
       .from("charter_companies")
       .select("*")
       .limit(opts.limit || 30);
+
+    // Samboat-only: show only the Samboat company row
+    if (process.env.SAMBOAT_ONLY === "true" || process.env.NEXT_PUBLIC_SAMBOAT_ONLY === "true") {
+      query = query.eq("slug", "samboat");
+    }
 
     // Location: OR across country/region/city/marina — same as boats search
     const locationTerms: string[] = [];
