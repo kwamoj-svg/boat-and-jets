@@ -477,10 +477,10 @@ async function processQuery(
     const isSocial = SOCIAL_DOMAINS.some((d) => domain.includes(d));
     const isClassifieds = CLASSIFIEDS_DOMAINS.some((d) => domain.includes(d));
 
-    // For specialized marketplaces: REQUIRE a price (otherwise data quality is junk).
-    // For social media / classifieds / forums: accept without price (Preis auf Anfrage).
-    if (!parsed.sale_price && !isSocial && !isClassifieds) continue;
-    const finalPrice = parsed.sale_price ?? 0; // 0 = on request
+    // We already filtered out category pages in parseSerperResult, so every
+    // remaining result is a concrete listing — accept without requiring a
+    // price (most snippets don't expose it). 0 means "on request".
+    const finalPrice = parsed.sale_price ?? 0;
 
     const slug = slugify(`${parsed.brand || ""}-${parsed.model || ""}-${parsed.year || ""}-${domain}-${r.link.slice(-12)}`);
 
