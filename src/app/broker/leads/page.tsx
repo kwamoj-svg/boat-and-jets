@@ -1,11 +1,12 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
-import { createClient } from "@/lib/supabase/server";
 import {
   ExternalLink, MapPin, Tag, TrendingUp, AlertCircle,
-  Phone, Mail, Globe, MessageCircle, Briefcase, Users, Hash,
+  Phone, Mail, Globe, MessageCircle, Briefcase, Users, Hash, Loader2,
 } from "lucide-react";
 
 interface BrokerLead {
@@ -31,6 +32,15 @@ interface BrokerLead {
   created_at: string;
 }
 
+interface ApiRow {
+  id: string;
+  entity_id: string | null;
+  entity_name: string | null;
+  country: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
 function platformIcon(p: string) {
   if (p === "instagram") return <Hash className="w-4 h-4 text-pink-400" />;
   if (p === "facebook") return <Users className="w-4 h-4 text-blue-400" />;
@@ -41,65 +51,66 @@ function platformIcon(p: string) {
   return <Globe className="w-4 h-4 text-gray-400" />;
 }
 
-interface AnalyticsEventRow {
-  id: string;
-  entity_id: string | null;
-  entity_name: string | null;
-  country: string | null;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
-}
+export default function BrokerLeadsPage() {
+  const [leads, setLeads] = useState<BrokerLead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-export default async function BrokerLeadsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login?redirect=/broker/leads");
-
-  // Broker leads are stored in analytics_events with event_type='broker_lead'
-  // (dedicated broker_leads table isn't created — fallback storage works fine).
-  const { data: rows } = await supabase
-    .from("analytics_events")
-    .select("id, entity_id, entity_name, country, metadata, created_at")
-    .eq("entity_type", "broker_lead")
-    .order("created_at", { ascending: false })
-    .limit(100);
-
-  const safeLeads: BrokerLead[] = ((rows as AnalyticsEventRow[] | null) ?? []).map((r) => {
-    const p = r.metadata || {};
-    return {
-      id: r.id,
-      intent: String(p.intent || "sell"),
-      source_platform: String(p.source_platform || "web"),
-      source_url: String(p.source_url || ""),
-      brand: (p.brand as string | null) ?? null,
-      model: (p.model as string | null) ?? null,
-      year: (p.year as number | null) ?? null,
-      length_m: (p.length_m as number | null) ?? null,
-      asking_price: (p.asking_price as number | null) ?? null,
-      currency: String(p.currency || "EUR"),
-      location: (p.location as string | null) ?? null,
-      country: r.country,
-      poster_handle: (p.poster_handle as string | null) ?? null,
-      contact_phone: (p.contact_phone as string | null) ?? null,
-      contact_email: (p.contact_email as string | null) ?? null,
-      raw_text: (p.raw_text as string | null) ?? null,
-      quality_score: (p.quality_score as number | null) ?? null,
-      quality_reasons: (p.quality_reasons as string[] | null) ?? null,
-      status: String(p.status || "new"),
-      created_at: r.created_at,
-    };
-  });
+  useEffect(() => {
+    fetch("/api/broker/leads", { cache: "no-store" })
+      .then(async (r) => {
+        if (r.status === 401) {
+          window.location.href = "/login?redirect=/broker/leads";
+          return null;
+        }
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error(e.error || "Failed to load");
+        }
+        return r.json();
+      })
+      .then((data) => {
+        if (!data) return;
+        const rows: ApiRow[] = data.leads || [];
+        const mapped: BrokerLead[] = rows.map((r) => {
+          const p = r.metadata || {};
+          return {
+            id: r.id,
+            intent: String(p.intent || "sell"),
+            source_platform: String(p.source_platform || "web"),
+            source_url: String(p.source_url || ""),
+            brand: (p.brand as string | null) ?? null,
+            model: (p.model as string | null) ?? null,
+            year: (p.year as number | null) ?? null,
+            length_m: (p.length_m as number | null) ?? null,
+            asking_price: (p.asking_price as number | null) ?? null,
+            currency: String(p.currency || "EUR"),
+            location: (p.location as string | null) ?? null,
+            country: r.country,
+            poster_handle: (p.poster_handle as string | null) ?? null,
+            contact_phone: (p.contact_phone as string | null) ?? null,
+            contact_email: (p.contact_email as string | null) ?? null,
+            raw_text: (p.raw_text as string | null) ?? null,
+            quality_score: (p.quality_score as number | null) ?? null,
+            quality_reasons: (p.quality_reasons as string[] | null) ?? null,
+            status: String(p.status || "new"),
+            created_at: r.created_at,
+          };
+        });
+        setLeads(mapped);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
 
   // Stats
-  const byPlatform = safeLeads.reduce<Record<string, number>>((acc, l) => {
+  const byPlatform = leads.reduce<Record<string, number>>((acc, l) => {
     acc[l.source_platform] = (acc[l.source_platform] || 0) + 1;
     return acc;
   }, {});
-  const sellLeads = safeLeads.filter((l) => l.intent === "sell").length;
-  const buyLeads = safeLeads.filter((l) => l.intent === "buy").length;
-  const charterLeads = safeLeads.filter((l) => l.intent === "charter").length;
+  const sellLeads = leads.filter((l) => l.intent === "sell").length;
+  const buyLeads = leads.filter((l) => l.intent === "buy").length;
+  const charterLeads = leads.filter((l) => l.intent === "charter").length;
 
   return (
     <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--color-navy-light)_0%,_var(--color-navy)_70%)]">
@@ -118,48 +129,59 @@ export default async function BrokerLeadsPage() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-          <Stat label="Gesamt" value={safeLeads.length} accent="gold" />
-          <Stat label="Verkauf" value={sellLeads} accent="emerald" />
-          <Stat label="Kaufinteresse" value={buyLeads} accent="cyan" />
-          <Stat label="Charter-Anfragen" value={charterLeads} accent="purple" />
-        </div>
-
-        {/* Platform breakdown */}
-        {Object.keys(byPlatform).length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-6">
-            {Object.entries(byPlatform)
-              .sort((a, b) => b[1] - a[1])
-              .map(([p, n]) => (
-                <span
-                  key={p}
-                  className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-gray-300 flex items-center gap-1.5 capitalize"
-                >
-                  {platformIcon(p)}
-                  {p} · {n}
-                </span>
-              ))}
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-gold animate-spin" />
           </div>
-        )}
-
-        {/* Leads list */}
-        {safeLeads.length === 0 ? (
-          <div className="text-center py-20 bg-white/[0.02] border border-white/5 rounded-2xl">
-            <AlertCircle className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-            <h2 className="text-white text-xl mb-2">Noch keine Leads</h2>
-            <p className="text-gray-500 text-sm max-w-md mx-auto">
-              Der Broker-Agent sucht stündlich auf Instagram, Facebook, LinkedIn,
-              Reddit, Kleinanzeigen und Foren nach Verkaufs-/Kaufabsichten.
-              Erste Ergebnisse erscheinen nach dem ersten Cron-Lauf.
-            </p>
+        ) : error ? (
+          <div className="text-center py-20 bg-red-500/5 border border-red-500/20 rounded-2xl">
+            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+            <p className="text-red-300 text-sm">{error}</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {safeLeads.map((lead) => (
-              <LeadRow key={lead.id} lead={lead} />
-            ))}
-          </div>
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+              <Stat label="Gesamt" value={leads.length} accent="gold" />
+              <Stat label="Verkauf" value={sellLeads} accent="emerald" />
+              <Stat label="Kaufinteresse" value={buyLeads} accent="cyan" />
+              <Stat label="Charter-Anfragen" value={charterLeads} accent="purple" />
+            </div>
+
+            {Object.keys(byPlatform).length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-6">
+                {Object.entries(byPlatform)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([p, n]) => (
+                    <span
+                      key={p}
+                      className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-gray-300 flex items-center gap-1.5 capitalize"
+                    >
+                      {platformIcon(p)}
+                      {p} · {n}
+                    </span>
+                  ))}
+              </div>
+            )}
+
+            {leads.length === 0 ? (
+              <div className="text-center py-20 bg-white/[0.02] border border-white/5 rounded-2xl">
+                <AlertCircle className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <h2 className="text-white text-xl mb-2">Noch keine Leads</h2>
+                <p className="text-gray-500 text-sm max-w-md mx-auto">
+                  Der Broker-Agent sucht stündlich auf Instagram, Facebook, LinkedIn,
+                  Reddit, Kleinanzeigen und Foren nach Verkaufs-/Kaufabsichten.
+                  Erste Ergebnisse erscheinen nach dem ersten Cron-Lauf.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {leads.map((lead) => (
+                  <LeadRow key={lead.id} lead={lead} />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
