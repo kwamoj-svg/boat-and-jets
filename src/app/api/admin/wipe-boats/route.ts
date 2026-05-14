@@ -23,13 +23,18 @@ export async function GET(req: NextRequest) {
   }
 
   const source = req.nextUrl.searchParams.get("source");
+  const table = req.nextUrl.searchParams.get("table") || "charter_boats";
   const confirm = req.nextUrl.searchParams.get("confirm") === "1";
 
   if (!source) {
     return NextResponse.json({
       error: "Specify ?source=...",
-      hint: "e.g. ?source=samboat_sitemap or ?source=auto_scrape or ?source=ALL&confirm=1",
+      hint: "?source=samboat_sitemap | auto_scrape | marketplace | social_media | classifieds | ALL&confirm=1 . Optional ?table=sale_boats",
     }, { status: 400 });
+  }
+
+  if (table !== "charter_boats" && table !== "sale_boats") {
+    return NextResponse.json({ error: "table must be charter_boats or sale_boats" }, { status: 400 });
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -37,14 +42,10 @@ export async function GET(req: NextRequest) {
   if (!url || !key) return NextResponse.json({ error: "DB not configured" }, { status: 500 });
   const db = createClient(url, key);
 
-  let query = db.from("charter_boats").delete({ count: "exact" });
+  let query = db.from(table).delete({ count: "exact" });
   if (source === "ALL") {
-    if (!confirm) {
-      return NextResponse.json({
-        error: "source=ALL requires &confirm=1",
-      }, { status: 400 });
-    }
-    query = query.neq("id", "00000000-0000-0000-0000-000000000000"); // delete all
+    if (!confirm) return NextResponse.json({ error: "source=ALL requires &confirm=1" }, { status: 400 });
+    query = query.neq("id", "00000000-0000-0000-0000-000000000000");
   } else {
     query = query.eq("source", source);
   }
@@ -52,5 +53,5 @@ export async function GET(req: NextRequest) {
   const { error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, source, deleted: count ?? 0 });
+  return NextResponse.json({ ok: true, table, source, deleted: count ?? 0 });
 }

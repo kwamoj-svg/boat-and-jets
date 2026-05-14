@@ -331,22 +331,40 @@ function parseSerperResult(r: SerperResult, fallbackType: string): {
   } catch { return null; }
 
   // REJECT category / search / listing-index pages — these are not concrete
-  // boat ads.  Heuristics:
-  //  - URL path ends in /make-X/, /type-X/, /model-X/ category-style segments
-  //  - Path matches a /search or /boats-for-sale/ listing-index pattern
-  //  - Plural "boats" / "yachts" + "for sale" without a specific model word
+  // boat ads. We're VERY aggressive here because Google ranks category pages
+  // higher than individual listings — we'd rather have FEWER sale boats with
+  // correct links than MANY broken category links.
+  const path = pathname.toLowerCase();
   const isCategoryUrl =
-    /\/(make|type|category|condition|class|brand|model|category)\/[^/]+\/?$/i.test(pathname) ||
-    /\/(boats-for-sale|yachts-for-sale|boats|yachts|search|listing|find)\/?$/i.test(pathname) ||
-    /\/boats-for-sale\/(make|type|category)-[^/]+(?:\/(make|type|model|condition)-[^/]+)*\/?$/i.test(pathname) ||
+    // Anywhere a category prefix appears
+    /\/(boats?-for-sale|yachts?-for-sale|boats?|yachts?)\/(make|type|category|condition|class|brand|model|country|state|city|region|worldregion|year|length|hull)-[^/]+/i.test(path) ||
+    // Path-level category endings
+    /\/(make|type|category|condition|class|brand|model)-[^/]+\/?$/i.test(path) ||
+    // Browse/index pages
+    /\/(boats-for-sale|yachts-for-sale|boats|yachts|search|listing|find|browse|all)\/?$/i.test(path) ||
+    // boat24.com / yachtall.com category pattern
+    /\/(motoryachten?|segelyachten?|motorboote?|segelboote?|katamarane?)\/[^/]+\/?$/i.test(path) ||
+    // <2 segments = likely homepage / category
     pathname.split("/").filter(Boolean).length < 2;
 
   const titleLower = r.title.toLowerCase();
   const isGenericCatTitle =
-    /(boats? for sale|yachts? for sale|zu verkaufen|à vendre|en venta|in vendita)\s*(-\s*\w+)?$/i.test(r.title.trim()) ||
-    /^(motoryachten|segelyachten|catamarans|motorboote|alle |over \d+|\d+\s*(boats|yachts|angebote))/i.test(titleLower);
+    /(boats? for sale|yachts? for sale|zu verkaufen|à vendre|en venta|in vendita)\s*(in|-|\b)/i.test(r.title.trim()) ||
+    /\b(boats? for sale|yachts? for sale)\b/i.test(r.title) ||
+    /^(motoryachten?|segelyachten?|catamarans?|motorboote?|alle |over \d+|\d+\s*(boats|yachts|angebote|annonces|anuncios))/i.test(titleLower) ||
+    /\(neu oder gebraucht\)/i.test(titleLower) ||
+    /über \d+\.?\d* angebote/i.test(titleLower);
 
   if (isCategoryUrl || isGenericCatTitle) return null;
+
+  // Concrete listings usually have either a slug with a personal name or digits
+  // in the LAST path segment (listing ID / year)
+  const lastSeg = pathname.split("/").filter(Boolean).pop() || "";
+  const looksLikeListing =
+    /\d/.test(lastSeg) || // contains a digit
+    lastSeg.split("-").length >= 3 || // multi-word slug
+    /^(post|p|status|reel|watch|video)\//i.test(path); // social media post URL
+  if (!looksLikeListing) return null;
 
   const text = `${r.title} ${r.snippet || ""}`;
 
