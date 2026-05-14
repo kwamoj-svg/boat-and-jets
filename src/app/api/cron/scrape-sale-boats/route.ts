@@ -357,14 +357,15 @@ function parseSerperResult(r: SerperResult, fallbackType: string): {
 
   if (isCategoryUrl || isGenericCatTitle) return null;
 
-  // Concrete listings usually have either a slug with a personal name or digits
-  // in the LAST path segment (listing ID / year)
-  const lastSeg = pathname.split("/").filter(Boolean).pop() || "";
-  const looksLikeListing =
-    /\d/.test(lastSeg) || // contains a digit
-    lastSeg.split("-").length >= 3 || // multi-word slug
-    /^(post|p|status|reel|watch|video)\//i.test(path); // social media post URL
-  if (!looksLikeListing) return null;
+  // Positive listing-indicator path segments (any of these means it's a
+  // concrete ad, not a category)
+  const isPositiveListing =
+    /\/(yacht|boat|boats|barca|bateau|veleros?|inserate|inserat|listing|ad|annonce|annunci|anuncio|advertentie|advert|product|item|p|post|status|reel|watch|video)\/[^/]+/i.test(path) ||
+    /\/(boots?|sailing|motor|catamaran)-[^/]+-\d/i.test(path) ||
+    // long detail slugs (≥4 dash-separated tokens) are almost always real listings
+    pathname.split("/").pop()!.split("-").length >= 4;
+
+  if (!isPositiveListing) return null;
 
   const text = `${r.title} ${r.snippet || ""}`;
 
