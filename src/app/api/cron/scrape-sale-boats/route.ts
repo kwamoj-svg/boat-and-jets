@@ -323,9 +323,30 @@ function parseSerperResult(r: SerperResult, fallbackType: string): {
   if (!r.title || !r.link) return null;
 
   let domain = "";
-  try { domain = new URL(r.link).hostname.replace("www.", ""); } catch { return null; }
-  // Accept any domain — we want social-media + niche broker sites too.
-  // Junk gets filtered by the requireSalePrice check below.
+  let pathname = "";
+  try {
+    const u = new URL(r.link);
+    domain = u.hostname.replace("www.", "");
+    pathname = u.pathname;
+  } catch { return null; }
+
+  // REJECT category / search / listing-index pages — these are not concrete
+  // boat ads.  Heuristics:
+  //  - URL path ends in /make-X/, /type-X/, /model-X/ category-style segments
+  //  - Path matches a /search or /boats-for-sale/ listing-index pattern
+  //  - Plural "boats" / "yachts" + "for sale" without a specific model word
+  const isCategoryUrl =
+    /\/(make|type|category|condition|class|brand|model|category)\/[^/]+\/?$/i.test(pathname) ||
+    /\/(boats-for-sale|yachts-for-sale|boats|yachts|search|listing|find)\/?$/i.test(pathname) ||
+    /\/boats-for-sale\/(make|type|category)-[^/]+(?:\/(make|type|model|condition)-[^/]+)*\/?$/i.test(pathname) ||
+    pathname.split("/").filter(Boolean).length < 2;
+
+  const titleLower = r.title.toLowerCase();
+  const isGenericCatTitle =
+    /(boats? for sale|yachts? for sale|zu verkaufen|à vendre|en venta|in vendita)\s*(-\s*\w+)?$/i.test(r.title.trim()) ||
+    /^(motoryachten|segelyachten|catamarans|motorboote|alle |over \d+|\d+\s*(boats|yachts|angebote))/i.test(titleLower);
+
+  if (isCategoryUrl || isGenericCatTitle) return null;
 
   const text = `${r.title} ${r.snippet || ""}`;
 
