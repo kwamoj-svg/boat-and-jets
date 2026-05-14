@@ -16,18 +16,49 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "VELIQA — AI-Powered Yacht Discovery",
+  metadataBase: new URL("https://veliqa.life"),
+  title: {
+    default: "VELIQA — AI-Powered Yacht Discovery",
+    template: "%s · VELIQA",
+  },
   description:
-    "The future of yacht and boat search. Describe your perfect boat experience and let AI find your match across 50+ platforms.",
+    "Suche und chartere Yachten, Segelboote, Katamarane und Motorboote weltweit. KI-gestützt, über 5.000 Boote, transparente Preise.",
   keywords: [
-    "yacht",
-    "boat",
-    "charter",
-    "luxury",
-    "AI",
-    "discovery",
-    "rental",
+    "yacht", "yacht charter", "boat rental", "boat charter", "sailing",
+    "catamaran", "motoryacht", "luxury yacht", "Mediterranean",
+    "Croatia", "Greece", "Spain", "Italy", "Caribbean",
+    "Segelboot mieten", "Katamaran chartern", "Yacht kaufen",
+    "AI search", "VELIQA",
   ],
+  authors: [{ name: "VELIQA" }],
+  creator: "VELIQA",
+  publisher: "VELIQA",
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: "VELIQA",
+    title: "VELIQA — AI-Powered Yacht Discovery",
+    description:
+      "Suche und chartere Yachten weltweit — KI-gestützt, 5.000+ Boote.",
+    url: "https://veliqa.life",
+    locale: "de_DE",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "VELIQA — AI-Powered Yacht Discovery",
+    description:
+      "Suche und chartere Yachten weltweit — KI-gestützt, 5.000+ Boote.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
 };
 
 export default function RootLayout({

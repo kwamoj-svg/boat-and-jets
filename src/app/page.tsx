@@ -12,6 +12,7 @@ import { Navbar } from "@/components/Navbar";
 import { Waves, Shield, Sparkles, Globe, Loader2, Ship } from "lucide-react";
 import { Footer } from "@/components/Footer";
 import { CookieBanner } from "@/components/CookieBanner";
+import { SaveSearchButton } from "@/components/SaveSearchButton";
 import type { DestinationName } from "@/components/FilterBar";
 import type { ExtractedListing } from "@/lib/claude-ai";
 
@@ -260,26 +261,31 @@ export default function Home() {
         {listings.length > 0 && (
           <section className="px-4 sm:px-6 py-6">
             <div className="max-w-6xl mx-auto">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
                 <h2 className="text-white text-lg font-light">
                   {searchDone
                     ? `${listings.length} Ergebnisse für "${searchQuery}"`
                     : `${listings.length} Ergebnisse bisher...`
                   }
                 </h2>
-                {searchDone && (
-                  <button
-                    onClick={() => {
-                      setListings([]);
-                      setSearchDone(false);
-                      setSearchQuery("");
-                      window.history.pushState({}, "", "/");
-                    }}
-                    className="text-sm text-gray-500 hover:text-gold transition-colors"
-                  >
-                    Neue Suche
-                  </button>
-                )}
+                <div className="flex items-center gap-3">
+                  {searchDone && searchQuery && (
+                    <SaveSearchButton query={searchQuery} />
+                  )}
+                  {searchDone && (
+                    <button
+                      onClick={() => {
+                        setListings([]);
+                        setSearchDone(false);
+                        setSearchQuery("");
+                        window.history.pushState({}, "", "/");
+                      }}
+                      className="text-sm text-gray-500 hover:text-gold transition-colors"
+                    >
+                      Neue Suche
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {listings.map((listing, i) => (
