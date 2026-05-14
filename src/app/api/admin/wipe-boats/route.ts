@@ -45,6 +45,15 @@ export async function GET(req: NextRequest) {
   let query = db.from(table).delete({ count: "exact" });
   if (source === "ALL") {
     if (!confirm) return NextResponse.json({ error: "source=ALL requires &confirm=1" }, { status: 400 });
+    // Extra safety on charter_boats — it's the big table we re-import slowly
+    if (table === "charter_boats") {
+      const dangerous = req.nextUrl.searchParams.get("dangerous");
+      if (dangerous !== "yes-wipe-everything") {
+        return NextResponse.json({
+          error: "Wiping charter_boats ALL is dangerous (just lost 24k Boataround entries). Add &dangerous=yes-wipe-everything if you really mean it.",
+        }, { status: 400 });
+      }
+    }
     query = query.neq("id", "00000000-0000-0000-0000-000000000000");
   } else {
     query = query.eq("source", source);
