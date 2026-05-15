@@ -33,6 +33,19 @@ interface Parsed {
   country: string | null;
   base_port: string | null;
   description: string | null;
+  // Spec fields (from embedded Vue prop JSON)
+  year: number | null;
+  length_m: number | null;
+  beam_m: number | null;
+  draft_m: number | null;
+  cabins: number | null;
+  max_guests: number | null;
+  crew_size: number | null;
+  engine_type: string | null;
+  engine_hp: number | null;
+  fuel_tank_l: number | null;
+  water_tank_l: number | null;
+  features: string[] | null;
 }
 
 async function fetchHtml(url: string): Promise<string | null> {
@@ -77,6 +90,28 @@ function normalizeCountry(raw: string | null): string | null {
   return COUNTRY_NORMALIZE[key] || raw.trim().replace(/[.,;]$/, "");
 }
 
+/** Decode HTML entities relevant inside Vue prop JSON blobs. */
+function unescapeHtml(s: string): string {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+/** Extract a JSON value embedded as an HTML attribute (Vue :prop style). */
+function extractJsonProp(html: string, pattern: RegExp): unknown | null {
+  const m = pattern.exec(html);
+  if (!m) return null;
+  try {
+    return JSON.parse(unescapeHtml(m[1]));
+  } catch {
+    return null;
+  }
+}
+
 function parseBoataround(html: string): Parsed {
   const out: Parsed = {
     price_per_day: null,
@@ -84,6 +119,18 @@ function parseBoataround(html: string): Parsed {
     country: null,
     base_port: null,
     description: null,
+    year: null,
+    length_m: null,
+    beam_m: null,
+    draft_m: null,
+    cabins: null,
+    max_guests: null,
+    crew_size: null,
+    engine_type: null,
+    engine_hp: null,
+    fuel_tank_l: null,
+    water_tank_l: null,
+    features: null,
   };
 
   // 1) JSON-LD blocks
@@ -127,6 +174,53 @@ function parseBoataround(html: string): Parsed {
     }
   }
 
+  // 3) Boat specs blob — Boataround embeds the boat-info-list :boat-information
+  //    prop as an HTML-encoded JSON object with all numeric specs.
+  //    Pattern: ...,"length":14.28,"beam":7.88,... (HTML-encoded with &quot;)
+  const specMatch = /(\{[^{}]*"length":[\d.]+[^{}]*"year":\d+[^{}]*\})/.exec(
+    unescapeHtml(html.slice(0, 400000))
+  );
+  if (specMatch) {
+    try {
+      const spec = JSON.parse(specMatch[1]) as Record<string, unknown>;
+      const num = (v: unknown) => (typeof v === "number" && v > 0 ? v : null);
+      out.year = num(spec.year);
+      out.length_m = num(spec.length);
+      out.beam_m = num(spec.beam);
+      out.draft_m = num(spec.draft);
+      out.cabins = num(spec.cabins);
+      out.max_guests = num(spec.allowed_people) ?? num(spec.max_sleeps) ?? num(spec.sleeps);
+      out.crew_size = num(spec.crew_sleeps);
+      out.engine_hp = num(spec.total_engine_power) ?? num(spec.engine_power);
+      out.fuel_tank_l = num(spec.fuel);
+      out.water_tank_l = num(spec.water_tank);
+      if (typeof spec.engine === "string" && spec.engine.length > 0 && spec.engine !== "0") {
+        out.engine_type = String(spec.engine);
+      }
+    } catch { /* ignore malformed spec */ }
+  }
+
+  // 4) Equipment / Entertainment / Cockpit arrays — three separate Vue props,
+  //    each is HTML-encoded `[{"name":"...","is_present":true|false,...}, ...]`.
+  //    We collect names where is_present === true into one features list.
+  const features: string[] = [];
+  for (const prop of ["equipment", "entertainment", "cockpit"]) {
+    const re = new RegExp(`:${prop}="(\\[[^"]+\\])"`, "i");
+    const arr = extractJsonProp(html, re);
+    if (Array.isArray(arr)) {
+      for (const item of arr) {
+        const it = item as { name?: string; is_present?: boolean };
+        if (it && it.is_present && typeof it.name === "string" && it.name.length > 0) {
+          features.push(it.name);
+        }
+      }
+    }
+  }
+  if (features.length > 0) {
+    // dedupe, preserve order
+    out.features = Array.from(new Set(features));
+  }
+
   // Sanity-check
   if (out.price_per_day && (out.price_per_day < 30 || out.price_per_day > 100000)) {
     out.price_per_day = null;
@@ -134,6 +228,12 @@ function parseBoataround(html: string): Parsed {
   if (out.price_per_week && (out.price_per_week < 200 || out.price_per_week > 500000)) {
     out.price_per_week = null;
   }
+  if (out.length_m && (out.length_m < 3 || out.length_m > 200)) out.length_m = null;
+  if (out.beam_m && (out.beam_m < 1 || out.beam_m > 30)) out.beam_m = null;
+  if (out.draft_m && (out.draft_m < 0.2 || out.draft_m > 15)) out.draft_m = null;
+  if (out.year && (out.year < 1900 || out.year > new Date().getFullYear() + 1)) out.year = null;
+  if (out.cabins && (out.cabins < 1 || out.cabins > 30)) out.cabins = null;
+  if (out.max_guests && (out.max_guests < 1 || out.max_guests > 50)) out.max_guests = null;
 
   return out;
 }
@@ -151,15 +251,19 @@ export async function GET(req: NextRequest) {
   if (!db) return NextResponse.json({ error: "DB not configured" }, { status: 500 });
 
   const count = Math.min(Math.max(1, parseInt(req.nextUrl.searchParams.get("count") || "100")), 300);
+  // Re-fill mode: ?refill=1 processes boats that already have a price but
+  //   are missing specs (length_m null). Without it, only price-less boats.
+  const refill = req.nextUrl.searchParams.get("refill") === "1";
 
-  const { data: rows, error: fetchErr } = await db
+  let q = db
     .from("charter_boats")
     .select("id, name, detail_url")
     .eq("source", "boataround_sitemap")
-    .is("price_per_day", null)
     .not("detail_url", "is", null)
     .order("created_at", { ascending: true })
     .limit(count);
+  q = refill ? q.is("length_m", null) : q.is("price_per_day", null);
+  const { data: rows, error: fetchErr } = await q;
 
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
   if (!rows || rows.length === 0) {
@@ -169,6 +273,8 @@ export async function GET(req: NextRequest) {
   let updated = 0;
   let withPrice = 0;
   let withCountry = 0;
+  let withSpecs = 0;
+  let withFeatures = 0;
   const errors: string[] = [];
 
   const CONCURRENCY = 6;
@@ -192,6 +298,18 @@ export async function GET(req: NextRequest) {
       if (p.price_per_week) patch.price_per_week = p.price_per_week;
       if (p.country) patch.country = p.country;
       if (p.base_port) patch.base_port = p.base_port;
+      if (p.year) patch.year = p.year;
+      if (p.length_m) patch.length_m = p.length_m;
+      if (p.beam_m) patch.beam_m = p.beam_m;
+      if (p.draft_m) patch.draft_m = p.draft_m;
+      if (p.cabins) patch.cabins = p.cabins;
+      if (p.max_guests) patch.max_guests = p.max_guests;
+      if (p.crew_size !== null && p.crew_size !== undefined) patch.crew_size = p.crew_size;
+      if (p.engine_type) patch.engine_type = p.engine_type;
+      if (p.engine_hp) patch.engine_hp = p.engine_hp;
+      if (p.fuel_tank_l) patch.fuel_tank_l = p.fuel_tank_l;
+      if (p.water_tank_l) patch.water_tank_l = p.water_tank_l;
+      if (p.features && p.features.length > 0) patch.features = p.features;
       if (Object.keys(patch).length === 0) continue;
 
       const { error: ue } = await db.from("charter_boats").update(patch).eq("id", r.value.id);
@@ -201,6 +319,8 @@ export async function GET(req: NextRequest) {
         updated++;
         if (p.price_per_day) withPrice++;
         if (p.country) withCountry++;
+        if (p.length_m) withSpecs++;
+        if (p.features && p.features.length > 0) withFeatures++;
       }
     }
   }
@@ -211,6 +331,9 @@ export async function GET(req: NextRequest) {
     updated,
     withPrice,
     withCountry,
+    withSpecs,
+    withFeatures,
+    refill,
     errors,
   });
 }
