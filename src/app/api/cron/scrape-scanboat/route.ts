@@ -207,6 +207,8 @@ export async function GET(req: NextRequest) {
         const ld = parseJsonLd(html);
         if (!ld || !ld.name) return null;
 
+        if (/\b(solgt|sold|verkauft|vendu|vendido)\b/i.test(ld.name)) return null;
+
         const price = ld.offers?.price ? parseInt(String(ld.offers.price).replace(/[^0-9]/g, "")) : null;
         const currency = ld.offers?.priceCurrency || "EUR";
         const year = ld.productionDate ? parseInt(ld.productionDate.slice(0, 4)) : null;

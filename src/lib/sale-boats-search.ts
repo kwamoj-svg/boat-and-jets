@@ -118,6 +118,7 @@ export async function searchSaleBoats(opts: {
     if (opts.condition) query = query.eq("condition", opts.condition);
 
     query = query
+      .gt("sale_price", 0)
       .order("featured", { ascending: false })
       .order("sale_price", { ascending: true, nullsFirst: false });
 
@@ -260,6 +261,7 @@ export async function searchSaleBoatsSummary(opts: {
     if (opts.condition) query = query.eq("condition", opts.condition);
 
     query = query
+      .gt("sale_price", 0)
       .order("featured", { ascending: false })
       .order("sale_price", { ascending: true, nullsFirst: false });
 
