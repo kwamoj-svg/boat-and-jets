@@ -163,6 +163,9 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Bulk Boataround Enrichment */}
+      <EnrichPricesPanel />
+
       {/* Pending Applications Panel */}
       {pendingList.length > 0 && (
         <div className="mb-8 bg-white/[0.03] border border-amber-500/20 rounded-2xl overflow-hidden">
@@ -290,5 +293,128 @@ function QuickAction({
         <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
       </div>
     </a>
+  );
+}
+
+interface EnrichResult {
+  processed: number;
+  enriched: number;
+  remaining: number;
+  done: boolean;
+  errors?: string[];
+}
+
+function EnrichPricesPanel() {
+  const [running, setRunning] = useState(false);
+  const [last, setLast] = useState<EnrichResult | null>(null);
+  const [totalEnriched, setTotalEnriched] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
+  async function runOne(): Promise<EnrichResult | null> {
+    try {
+      const r = await fetch("/api/admin/enrich-prices?count=50");
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        setError(body.error || `HTTP ${r.status}`);
+        return null;
+      }
+      return (await r.json()) as EnrichResult;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return null;
+    }
+  }
+
+  async function runUntilDone() {
+    setRunning(true);
+    setError(null);
+    let total = 0;
+    while (true) {
+      const res = await runOne();
+      if (!res) break;
+      total += res.enriched;
+      setTotalEnriched(total);
+      setLast(res);
+      if (res.done || res.remaining === 0) break;
+    }
+    setRunning(false);
+  }
+
+  async function runOnce() {
+    setRunning(true);
+    setError(null);
+    const res = await runOne();
+    if (res) {
+      setLast(res);
+      setTotalEnriched((t) => t + res.enriched);
+    }
+    setRunning(false);
+  }
+
+  const remainingPct = last ? Math.min(100, Math.round((totalEnriched / Math.max(1, totalEnriched + last.remaining)) * 100)) : 0;
+
+  return (
+    <div className="mb-8 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5">
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <h2 className="text-white text-base font-medium">Boataround-Daten anreichern</h2>
+          <p className="text-xs text-gray-500 mt-1 max-w-lg">
+            Holt Preis, Land, Hafen, Länge, Kabinen, Motor, Tanks und Ausstattung für alle Boote
+            ohne Preis. Läuft in 50er-Batches. „Bis fertig" pingt automatisch nach.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={runOnce}
+            disabled={running}
+            className="px-4 py-2 text-sm rounded-lg bg-white/[0.05] hover:bg-white/[0.08] border border-white/10 text-white disabled:opacity-50 transition-colors"
+          >
+            50 nachladen
+          </button>
+          <button
+            onClick={runUntilDone}
+            disabled={running}
+            className="px-4 py-2 text-sm rounded-lg bg-gold/90 hover:bg-gold text-navy font-medium disabled:opacity-50 transition-colors"
+          >
+            {running ? "Läuft..." : "Bis fertig"}
+          </button>
+        </div>
+      </div>
+
+      {last && (
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center justify-between text-xs text-gray-400">
+            <span>
+              Diese Session: <strong className="text-gold tabular-nums">{totalEnriched}</strong> angereichert
+            </span>
+            <span className="tabular-nums">
+              noch offen: <strong className="text-white">{last.remaining.toLocaleString("de-DE")}</strong>
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
+            <div
+              className="h-full bg-gold transition-all duration-500"
+              style={{ width: `${remainingPct}%` }}
+            />
+          </div>
+          {last.errors && last.errors.length > 0 && (
+            <div className="text-[11px] text-amber-400">
+              ⚠ {last.errors.length} Fehler im letzten Batch ({last.errors[0]})
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-3 text-sm text-red-400">
+          Fehler: {error}
+          {error.toLowerCase().includes("admin") && (
+            <span className="block text-xs text-gray-500 mt-1">
+              Tipp: gehe auf /api/admin/promote-me um dich als Admin freizuschalten.
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
