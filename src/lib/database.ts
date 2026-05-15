@@ -406,11 +406,16 @@ export async function searchCharterBoats(opts: {
       query = query.lte("price_per_day", opts.budgetPerDay * 1.3);
     }
 
-    // Free-text search — apply always when we have residual query words after
-    // stop-word removal. Previously we skipped this when any structured filter
-    // matched, which made e.g. "Yacht Greece" and "Katamaran Ibiza" return the
-    // same default-sorted batch (because both fell back to country.is.null OR).
-    if (opts.query && opts.query.trim().length > 0) {
+    // Free-text search — apply only when we have NO structured filters.
+    // With structured filters, the location OR already includes country.is.null
+    // (Boataround sitemap has no country/region/port), so combining it with a
+    // free-text OR that requires the query word to appear in name/desc nukes
+    // every result. Free-text is best-effort fallback only.
+    const hasStructuredFilters = !!(
+      opts.boatType || opts.country || opts.region || opts.city || opts.guests
+    );
+
+    if (!hasStructuredFilters && opts.query && opts.query.trim().length > 0) {
       const STOP_WORDS = new Set([
         "boot", "boat", "yacht", "charter", "mieten", "rental", "hire", "book",
         "segelboot", "motorboot", "katamaran", "sailing", "sailboat", "motorboat", "catamaran",
