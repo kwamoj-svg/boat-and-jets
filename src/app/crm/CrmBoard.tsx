@@ -63,8 +63,8 @@ export function CrmBoard({ entries }: { entries: CrmEntry[] }) {
   return (
     <>
       {/* Toolbar */}
-      <div className="flex flex-col lg:flex-row lg:items-center gap-3 mb-5">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setView("kanban")}
             className={`px-4 py-2 rounded-lg text-sm transition-colors ${
@@ -87,8 +87,8 @@ export function CrmBoard({ entries }: { entries: CrmEntry[] }) {
           </button>
         </div>
 
-        <div className="flex-1 flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[200px]">
+        <div className="flex-1 min-w-[260px] flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[180px]">
             <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -124,7 +124,7 @@ export function CrmBoard({ entries }: { entries: CrmEntry[] }) {
 
         <button
           onClick={() => setAdding(true)}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-gold/90 hover:bg-gold text-navy text-sm font-medium rounded-lg transition-colors"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-gold/90 hover:bg-gold text-navy text-sm font-medium rounded-lg transition-colors shrink-0 ml-auto"
         >
           <Plus className="w-4 h-4" />
           Neu hinzufügen
@@ -138,29 +138,31 @@ export function CrmBoard({ entries }: { entries: CrmEntry[] }) {
       )}
 
       {view === "kanban" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 overflow-x-auto">
-          {STATUSES.map((s) => (
-            <div
-              key={s.key}
-              className="bg-white/[0.02] border border-white/5 rounded-xl p-3 min-w-[220px]"
-            >
-              <div className={`text-xs font-medium px-2 py-1 rounded ${s.color} inline-block mb-3`}>
-                {s.label} · {grouped[s.key].length}
+        <div className="-mx-4 sm:mx-0 overflow-x-auto pb-2">
+          <div className="flex gap-3 px-4 sm:px-0 min-w-min">
+            {STATUSES.map((s) => (
+              <div
+                key={s.key}
+                className="bg-white/[0.02] border border-white/5 rounded-xl p-3 w-[260px] shrink-0 flex flex-col"
+              >
+                <div className={`text-xs font-medium px-2 py-1 rounded ${s.color} inline-block self-start mb-3`}>
+                  {s.label} · {grouped[s.key].length}
+                </div>
+                <div className="space-y-2 flex-1">
+                  {grouped[s.key].map((entry) => (
+                    <CrmCard key={entry.id} entry={entry} onEdit={() => setEditing(entry)} />
+                  ))}
+                  {grouped[s.key].length === 0 && (
+                    <p className="text-xs text-gray-600 italic py-2">Keine Einträge</p>
+                  )}
+                </div>
               </div>
-              <div className="space-y-2">
-                {grouped[s.key].map((entry) => (
-                  <CrmCard key={entry.id} entry={entry} onEdit={() => setEditing(entry)} />
-                ))}
-                {grouped[s.key].length === 0 && (
-                  <p className="text-xs text-gray-600 italic py-2">Keine Einträge</p>
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       ) : (
-        <div className="bg-white/[0.02] border border-white/5 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white/[0.02] border border-white/5 rounded-xl overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-white/[0.03] text-gray-400 text-xs">
               <tr>
                 <th className="text-left p-3">Boot</th>
