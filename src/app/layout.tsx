@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     template: "%s · VELIQA",
   },
   description:
-    "Suche und chartere Yachten, Segelboote, Katamarane und Motorboote weltweit. KI-gestützt, über 5.000 Boote, transparente Preise.",
+    "Suche und chartere Yachten, Segelboote, Katamarane und Motorboote weltweit. KI-gestützt, über 24.000 verifizierte Boote, direkte Buchung beim Anbieter.",
   keywords: [
     "yacht", "yacht charter", "boat rental", "boat charter", "sailing",
     "catamaran", "motoryacht", "luxury yacht", "Mediterranean",
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     siteName: "VELIQA",
     title: "VELIQA — AI-Powered Yacht Discovery",
     description:
-      "Suche und chartere Yachten weltweit — KI-gestützt, 5.000+ Boote.",
+      "Suche und chartere Yachten weltweit — KI-gestützt, 24.000+ Boote.",
     url: "https://veliqa.life",
     locale: "de_DE",
   },
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "VELIQA — AI-Powered Yacht Discovery",
     description:
-      "Suche und chartere Yachten weltweit — KI-gestützt, 5.000+ Boote.",
+      "Suche und chartere Yachten weltweit — KI-gestützt, 24.000+ Boote.",
   },
   robots: {
     index: true,
@@ -69,7 +69,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="de"
       className={`${inter.variable} ${playfair.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
