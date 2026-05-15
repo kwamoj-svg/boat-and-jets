@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchSaleBoats } from "@/lib/sale-boats-search";
+import { searchSaleBoats, searchSaleBoatsSummary } from "@/lib/sale-boats-search";
 import { parseUserQuery } from "@/lib/claude-ai";
 
 export const dynamic = "force-dynamic";
@@ -40,10 +40,14 @@ export async function GET(req: NextRequest) {
     limit: Math.min(Math.max(1, parseInt(sp.get("limit") || "30")), 60),
   };
 
-  const results = await searchSaleBoats(opts);
+  const [results, summaries] = await Promise.all([
+    searchSaleBoats(opts),
+    searchSaleBoatsSummary(opts),
+  ]);
 
   return NextResponse.json({
     results,
+    boats: summaries,
     total: results.length,
     filters: opts,
     parsed,
