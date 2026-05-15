@@ -178,12 +178,31 @@ async function handleGet(req: NextRequest) {
       const safe = region.replace(/[(),%]/g, "");
       query = query.or(`region.ilike.%${safe}%,country.ilike.%${safe}%,base_port.ilike.%${safe}%,name.ilike.%${safe}%,country.is.null`);
     }
-    if (minGuests) query = query.gte("max_guests", parseInt(minGuests));
-    if (maxPrice) query = query.lte("price_per_day", parseFloat(maxPrice));
+    // NULL-tolerant: most Boataround boats have NULL max_guests/price_per_day
+    // until the spec backfill runs. Excluding NULL would hide ~95% of the
+    // catalog whenever the user sets either filter.
+    if (minGuests) {
+      const n = parseInt(minGuests);
+      if (!isNaN(n)) {
+        query = query.or(`max_guests.gte.${n},max_guests.is.null`);
+      }
+    }
+    if (maxPrice) {
+      const n = parseFloat(maxPrice);
+      if (!isNaN(n)) {
+        query = query.or(`price_per_day.lte.${n},price_per_day.is.null`);
+      }
+    }
     if (brand) query = query.ilike("brand", `%${brand}%`);
     if (companyId) query = query.eq("company_id", companyId);
     if (q) {
-      query = query.textSearch("search_vector", q.split(/\s+/).join(" & "));
+      // Plain ILIKE across name/brand/model/base_port — search_vector isn't
+      // populated for the Boataround import path, so textSearch returned
+      // empty for most queries.
+      const safe = q.replace(/[(),%]/g, "");
+      query = query.or(
+        `name.ilike.%${safe}%,brand.ilike.%${safe}%,model.ilike.%${safe}%,base_port.ilike.%${safe}%`
+      );
     }
 
     const { data, count, error } = await query;
