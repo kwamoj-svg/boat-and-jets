@@ -217,7 +217,7 @@ function parsePage(html: string, url: string): ParsedBoat | null {
     source: "marketplace",
     status: "active",
     verified: false,
-    material: hullMatch || null,
+    // material not in DB schema — omit
   };
 }
 

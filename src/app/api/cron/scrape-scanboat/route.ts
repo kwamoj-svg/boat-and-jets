@@ -251,7 +251,7 @@ export async function GET(req: NextRequest) {
           source: "marketplace",
           status: "active",
           verified: false,
-          material: ld.material || null,
+          // material not in DB schema — omit
         };
       })
     );
