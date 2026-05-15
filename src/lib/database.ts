@@ -400,10 +400,10 @@ export async function searchCharterBoats(opts: {
       query = query.or(orParts.join(","));
     }
     if (opts.guests) {
-      query = query.gte("max_guests", opts.guests);
+      query = query.or(`max_guests.gte.${opts.guests},max_guests.is.null`);
     }
     if (opts.budgetPerDay) {
-      query = query.lte("price_per_day", opts.budgetPerDay * 1.3);
+      query = query.or(`price_per_day.lte.${Math.round(opts.budgetPerDay * 1.3)},price_per_day.is.null`);
     }
 
     // Free-text search — apply only when we have NO structured filters.

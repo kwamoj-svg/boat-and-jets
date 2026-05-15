@@ -56,6 +56,11 @@ export interface ExtractedListing {
   match_reasons: string[];
   ai_summary: string;
   image_url?: string;
+  is_sale?: boolean;
+  condition?: string;
+  vat_included?: boolean;
+  hours_used?: number;
+  location?: string;
 }
 
 /** Fallback parser when AI is unavailable — extracts basics from raw text */

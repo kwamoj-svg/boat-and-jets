@@ -591,7 +591,7 @@ export async function GET(req: NextRequest) {
   const db = getServiceDb();
   if (!db) return NextResponse.json({ error: "DB not configured" }, { status: 500 });
 
-  const count = Math.min(Math.max(1, parseInt(req.nextUrl.searchParams.get("count") || "12")), 40);
+  const count = Math.min(Math.max(1, parseInt(req.nextUrl.searchParams.get("count") || "40")), 40);
   const startAtParam = req.nextUrl.searchParams.get("startAt");
   const hour = new Date().getUTCHours();
   const startIdx =
