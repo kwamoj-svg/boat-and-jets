@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { enrichBoatsBackground } from "@/lib/boataround-enrich";
 
 function getDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -76,6 +77,35 @@ async function handleGet(req: NextRequest) {
 
     if (boatErr || !boat) {
       return Response.json({ error: "Boat not found" }, { status: 404 });
+    }
+
+    // If this is a Boataround boat with missing price, enrich inline so the
+    // very next page-load shows the data. Wait up to 6s, then return what we
+    // have either way.
+    type BoatRow = {
+      id: string;
+      detail_url: string | null;
+      price_per_day: number | null;
+      source: string | null;
+    };
+    const b = boat as unknown as BoatRow;
+    if (b.source === "boataround_sitemap" && b.price_per_day == null && b.detail_url) {
+      try {
+        const { enrichBoataroundBoat } = await import("@/lib/boataround-enrich");
+        const ok = await Promise.race([
+          enrichBoataroundBoat(b.id, b.detail_url),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 6000)),
+        ]);
+        if (ok) {
+          // Re-fetch the now-enriched row so the response has the new fields
+          const { data: refreshed } = await db
+            .from("charter_boats")
+            .select("*, charter_companies(id, company_name, slug, country, city, phone, email, website, rating, review_count, services, languages)")
+            .eq("slug", slug)
+            .single();
+          if (refreshed) return Response.json({ boat: refreshed });
+        }
+      } catch { /* ignore — return original */ }
     }
 
     return Response.json({ boat });
@@ -208,6 +238,20 @@ async function handleGet(req: NextRequest) {
     const { data, count, error } = await query;
     if (error) {
       return Response.json({ error: error.message }, { status: 500 });
+    }
+
+    // Fire-and-forget enrichment for the first few null-price rows in this
+    // page. Each user visit slowly fills the catalog with prices+specs
+    // pulled from Boataround detail pages — no manual CRON trigger needed.
+    type EnrichRow = { id: string; detail_url: string | null; price_per_day: number | null };
+    const enrichTargets = ((data as EnrichRow[] | null) || [])
+      .filter((b) => b.price_per_day == null && b.detail_url)
+      .slice(0, 6);
+    if (enrichTargets.length > 0) {
+      enrichBoatsBackground(
+        enrichTargets.map((b) => ({ id: b.id, detail_url: b.detail_url })),
+        enrichTargets.length
+      );
     }
 
     return Response.json({
