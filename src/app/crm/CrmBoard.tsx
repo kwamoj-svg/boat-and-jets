@@ -33,6 +33,22 @@ const STATUSES: { key: CrmStatus; label: string; color: string }[] = [
   { key: "cancelled", label: "Verworfen", color: "bg-gray-500/20 text-gray-400 border-gray-500/20" },
 ];
 
+const COLUMN_DOT: Record<CrmStatus, string> = {
+  interested: "bg-blue-400",
+  contacted: "bg-purple-400",
+  quoted: "bg-gold",
+  negotiating: "bg-orange-400",
+  booked: "bg-emerald-400",
+  completed: "bg-green-400",
+  cancelled: "bg-gray-500",
+};
+
+const PRIORITY_BADGE: Record<"low" | "medium" | "high", { label: string; cls: string }> = {
+  high: { label: "Hoch", cls: "bg-red-500/15 text-red-300 border-red-500/20" },
+  medium: { label: "Mittel", cls: "bg-amber-500/15 text-amber-300 border-amber-500/20" },
+  low: { label: "Niedrig", cls: "bg-gray-500/15 text-gray-400 border-gray-500/20" },
+};
+
 export function CrmBoard({ entries }: { entries: CrmEntry[] }) {
   const [view, setView] = useState<"kanban" | "list">("kanban");
   const [editing, setEditing] = useState<CrmEntry | null>(null);
@@ -138,26 +154,40 @@ export function CrmBoard({ entries }: { entries: CrmEntry[] }) {
       )}
 
       {view === "kanban" ? (
-        <div className="-mx-4 sm:mx-0 overflow-x-auto pb-2">
-          <div className="flex gap-3 px-4 sm:px-0 min-w-min">
-            {STATUSES.map((s) => (
-              <div
-                key={s.key}
-                className="bg-white/[0.02] border border-white/5 rounded-xl p-3 w-[260px] shrink-0 flex flex-col"
-              >
-                <div className={`text-xs font-medium px-2 py-1 rounded ${s.color} inline-block self-start mb-3`}>
-                  {s.label} · {grouped[s.key].length}
+        <div className="-mx-4 sm:mx-0 overflow-x-auto pb-4">
+          <div className="flex gap-4 px-4 sm:px-0 min-w-min items-start">
+            {STATUSES.map((s) => {
+              const items = grouped[s.key];
+              return (
+                <div
+                  key={s.key}
+                  className="w-[280px] shrink-0 flex flex-col bg-navy/40 border border-white/10 rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.25)]"
+                >
+                  {/* Column header */}
+                  <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between sticky top-0 bg-navy/60 backdrop-blur-sm rounded-t-2xl">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${COLUMN_DOT[s.key]}`} />
+                      <span className="text-white text-sm font-medium">{s.label}</span>
+                    </div>
+                    <span className="text-xs text-gray-400 px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/10 tabular-nums">
+                      {items.length}
+                    </span>
+                  </div>
+
+                  {/* Cards */}
+                  <div className="p-3 space-y-2 flex-1 min-h-[100px]">
+                    {items.map((entry) => (
+                      <CrmCard key={entry.id} entry={entry} onEdit={() => setEditing(entry)} />
+                    ))}
+                    {items.length === 0 && (
+                      <div className="text-center py-8 px-2 text-xs text-gray-600 italic border border-dashed border-white/5 rounded-lg">
+                        Hier ist noch nichts.
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2 flex-1">
-                  {grouped[s.key].map((entry) => (
-                    <CrmCard key={entry.id} entry={entry} onEdit={() => setEditing(entry)} />
-                  ))}
-                  {grouped[s.key].length === 0 && (
-                    <p className="text-xs text-gray-600 italic py-2">Keine Einträge</p>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : (
@@ -191,36 +221,70 @@ export function CrmBoard({ entries }: { entries: CrmEntry[] }) {
 function CrmCard({ entry, onEdit }: { entry: CrmEntry; onEdit: () => void }) {
   const reminderDue =
     entry.reminder_date && !entry.reminder_done && new Date(entry.reminder_date) <= new Date();
+  const prio = PRIORITY_BADGE[entry.priority] ?? PRIORITY_BADGE.medium;
 
   return (
     <div
       onClick={onEdit}
-      className="bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-gold/20 rounded-lg p-3 cursor-pointer transition-colors"
+      className="group bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-gold/40 rounded-xl p-3 cursor-pointer transition-all hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <h3 className="text-white text-sm font-medium leading-tight line-clamp-2">
-          {entry.boat_name}
-        </h3>
-        {reminderDue && <Bell className="w-3.5 h-3.5 text-gold flex-shrink-0" />}
+      {/* Top row: thumbnail + title + reminder bell */}
+      <div className="flex items-start gap-2.5 mb-2">
+        {entry.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={entry.image_url}
+            alt={entry.boat_name}
+            className="w-10 h-10 rounded-lg object-cover border border-white/5 shrink-0"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-gold/15 to-gold/5 border border-white/5 shrink-0 flex items-center justify-center">
+            <Building2 className="w-4 h-4 text-gold/60" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-white text-sm font-medium leading-tight line-clamp-2">
+            {entry.boat_name}
+          </h3>
+          {entry.company_name && (
+            <p className="text-[11px] text-gray-500 truncate mt-0.5">
+              {entry.company_name}
+            </p>
+          )}
+        </div>
+        {reminderDue && (
+          <span className="text-gold shrink-0" title="Reminder fällig">
+            <Bell className="w-3.5 h-3.5" />
+          </span>
+        )}
       </div>
-      {entry.company_name && (
-        <p className="text-xs text-gray-500 flex items-center gap-1 mb-1">
-          <Building2 className="w-3 h-3" />
-          {entry.company_name}
-        </p>
-      )}
-      {entry.quoted_price && (
-        <p className="text-xs text-gold flex items-center gap-1">
-          <Euro className="w-3 h-3" />
-          {Number(entry.quoted_price).toLocaleString("de-DE")} {entry.currency}
-        </p>
-      )}
-      {entry.charter_start && (
-        <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
-          <Calendar className="w-3 h-3" />
-          {new Date(entry.charter_start).toLocaleDateString("de-DE")}
-          {entry.charter_end && ` – ${new Date(entry.charter_end).toLocaleDateString("de-DE")}`}
-        </p>
+
+      {/* Metadata row: priority + price + dates */}
+      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${prio.cls}`}>
+          {prio.label}
+        </span>
+        {entry.quoted_price && (
+          <span className="text-[11px] text-gold-light flex items-center gap-0.5 font-medium">
+            <Euro className="w-3 h-3" />
+            {Number(entry.quoted_price).toLocaleString("de-DE")}
+          </span>
+        )}
+        {entry.charter_start && (
+          <span className="text-[10px] text-gray-400 flex items-center gap-0.5 ml-auto">
+            <Calendar className="w-3 h-3" />
+            {new Date(entry.charter_start).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}
+          </span>
+        )}
+      </div>
+
+      {/* Next action — only if set */}
+      {entry.next_action && (
+        <div className="mt-2 pt-2 border-t border-white/5 text-[11px] text-gray-300 line-clamp-1 flex items-center gap-1">
+          <span className="text-gold/70">→</span>
+          {entry.next_action}
+        </div>
       )}
     </div>
   );

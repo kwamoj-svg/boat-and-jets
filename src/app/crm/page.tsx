@@ -86,21 +86,23 @@ function StatCard({
 }) {
   return (
     <div
-      className={`p-4 rounded-xl border ${
+      className={`px-5 py-4 rounded-2xl border backdrop-blur-sm transition-colors ${
         accent
-          ? "bg-gold/10 border-gold/20"
-          : "bg-white/[0.03] border-white/5"
+          ? "bg-gradient-to-br from-gold/15 to-gold/5 border-gold/30 shadow-[0_4px_20px_rgba(200,165,90,0.12)]"
+          : "bg-white/[0.04] border-white/10 hover:border-white/20"
       }`}
     >
       <div
-        className={`flex items-center gap-2 text-xs ${
-          accent ? "text-gold" : "text-gray-400"
+        className={`flex items-center gap-2 text-[11px] uppercase tracking-wider ${
+          accent ? "text-gold-light" : "text-gray-400"
         }`}
       >
         {icon}
         {label}
       </div>
-      <div className="text-2xl font-light text-white mt-2">{value}</div>
+      <div className={`text-3xl font-light mt-2 tabular-nums ${accent ? "text-gold" : "text-white"}`}>
+        {value}
+      </div>
     </div>
   );
 }
