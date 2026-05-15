@@ -361,7 +361,7 @@ export async function searchCharterBoats(opts: {
         catamaran: ["catamaran"],
         katamaran: ["catamaran"],
         gulet: ["gulet"],
-        yacht: ["yacht", "motorboat", "sailboat", "catamaran"], // generic — match all luxury
+        yacht: ["yacht"], // narrow: explicitly tagged motor/sailing yachts only — generic "yacht" used to match everything and made results meaningless
         speedboat: ["speedboat", "motorboat"],
         houseboat: ["houseboat"],
         jetski: ["jet_ski"],
@@ -406,15 +406,11 @@ export async function searchCharterBoats(opts: {
       query = query.lte("price_per_day", opts.budgetPerDay * 1.3);
     }
 
-    // Free-text search — only apply if no structured filters already matched
-    // (otherwise it over-restricts: "Segelboot Kroatien" already filters by
-    // boat_type=sailboat AND country=Croatia, no need to also require those
-    // words in name/brand/etc.)
-    const hasStructuredFilters = !!(
-      opts.boatType || opts.country || opts.region || opts.city || opts.guests
-    );
-
-    if (!hasStructuredFilters && opts.query && opts.query.trim().length > 0) {
+    // Free-text search — apply always when we have residual query words after
+    // stop-word removal. Previously we skipped this when any structured filter
+    // matched, which made e.g. "Yacht Greece" and "Katamaran Ibiza" return the
+    // same default-sorted batch (because both fell back to country.is.null OR).
+    if (opts.query && opts.query.trim().length > 0) {
       const STOP_WORDS = new Set([
         "boot", "boat", "yacht", "charter", "mieten", "rental", "hire", "book",
         "segelboot", "motorboot", "katamaran", "sailing", "sailboat", "motorboat", "catamaran",
