@@ -48,13 +48,14 @@ export default async function CrmPage() {
           </div>
         )}
 
-        {/* Empty state */}
-        {entries.length === 0 ? (
-          <div className="text-center py-20 bg-white/[0.02] border border-white/5 rounded-2xl">
+        <CrmBoard entries={entries} />
+
+        {entries.length === 0 && (
+          <div className="text-center py-16 bg-white/[0.02] border border-white/5 rounded-2xl mt-6">
             <Briefcase className="w-12 h-12 text-gray-600 mx-auto mb-4" />
             <h2 className="text-white text-xl font-light mb-2">Dein CRM ist leer</h2>
             <p className="text-gray-500 text-sm max-w-md mx-auto">
-              Füge Boote aus den Suchergebnissen hinzu, um sie hier zu verwalten —
+              Nutze „Neu hinzufügen" oben rechts oder füge Boote aus den Suchergebnissen hinzu —
               mit Pipeline-Status, Kontakt-Log, Angeboten und Reminder.
             </p>
             <a
@@ -64,8 +65,6 @@ export default async function CrmPage() {
               Boote suchen
             </a>
           </div>
-        ) : (
-          <CrmBoard entries={entries} />
         )}
       </div>
 

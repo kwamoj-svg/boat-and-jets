@@ -15,6 +15,10 @@ export function Footer() {
           <Link href="/impressum" className="hover:text-gray-300 transition-colors">
             Impressum
           </Link>
+          <span className="text-gray-700">|</span>
+          <Link href="/blog" className="hover:text-gray-300 transition-colors">
+            Blog
+          </Link>
         </nav>
       </div>
     </footer>
