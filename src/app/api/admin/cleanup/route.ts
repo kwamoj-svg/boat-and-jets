@@ -182,6 +182,18 @@ export async function GET(req: NextRequest) {
     report.errors.push(`sale sold: ${e}`);
   }
 
+  // 3d) Fix "Brand missing" → null in sale_boats
+  let saleBrandsFixed = 0;
+  try {
+    const { error, count } = await db
+      .from("sale_boats")
+      .update({ brand: null }, { count: "exact" })
+      .ilike("brand", "brand missing");
+    if (!error) saleBrandsFixed = count ?? 0;
+  } catch (e) {
+    report.errors.push(`sale brands: ${e}`);
+  }
+
   // 4) Delete completely useless rows (no price AND no images AND no description AND auto-scraped)
   try {
     const { error, count } = await db
@@ -231,6 +243,7 @@ export async function GET(req: NextRequest) {
     ...report,
     saleJunkDeleted,
     saleSoldDeleted,
+    saleBrandsFixed,
     duplicatesDeleted: dedupedCount,
   });
 }

@@ -213,7 +213,8 @@ export async function GET(req: NextRequest) {
         const price = ld.offers?.price ? parseInt(String(ld.offers.price).replace(/[^0-9]/g, "")) : null;
         const currency = ld.offers?.priceCurrency || "EUR";
         const year = ld.productionDate ? parseInt(ld.productionDate.slice(0, 4)) : null;
-        const brandName = ld.brand?.name?.replace(/\s+(International|Yachts?|Boats?|Marine)$/i, "") || null;
+        const rawBrand = ld.brand?.name?.replace(/\s+(International|Yachts?|Boats?|Marine)$/i, "") || null;
+        const brandName = rawBrand && /^(brand missing|unknown|n\/a|other|misc)$/i.test(rawBrand) ? null : rawBrand;
 
         const bodyType = ld.bodyType || "";
         const boatType = detectBoatType(bodyType, url);
