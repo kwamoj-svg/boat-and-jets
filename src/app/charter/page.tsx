@@ -32,6 +32,7 @@ interface CharterBoat {
   cabins: number | null;
   max_guests: number | null;
   price_per_day: number | null;
+  price_per_week: number | null;
   currency: string;
   base_port: string | null;
   country: string | null;
@@ -262,8 +263,16 @@ function BoatCard({ boat }: { boat: CharterBoat }) {
           <div>
             {boat.price_per_day != null ? (
               <div className="text-gold text-lg font-medium">
-                {boat.price_per_day.toLocaleString("de-DE")} {boat.currency || "EUR"}
+                ab {boat.price_per_day.toLocaleString("de-DE")} {boat.currency || "EUR"}
                 <span className="text-xs text-gray-500 font-normal ml-1">/Tag</span>
+              </div>
+            ) : boat.price_per_week != null ? (
+              <div className="text-gold text-lg font-medium">
+                ab {Math.round(boat.price_per_week / 7).toLocaleString("de-DE")} {boat.currency || "EUR"}
+                <span className="text-xs text-gray-500 font-normal ml-1">/Tag</span>
+                <div className="text-[10px] text-gray-500 mt-0.5">
+                  {boat.price_per_week.toLocaleString("de-DE")} {boat.currency || "EUR"} /Woche
+                </div>
               </div>
             ) : (
               <div className="text-gray-400 text-sm font-medium">

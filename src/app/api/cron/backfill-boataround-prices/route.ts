@@ -146,8 +146,9 @@ function parseBoataround(html: string): Parsed {
           for (const o of offers) {
             const p = parseFloat(o.price || o.lowPrice || "");
             if (!isNaN(p) && p > 0) {
-              if (p < 5000) out.price_per_day = p;
-              else out.price_per_week = p;
+              if (out.price_per_day == null || p < out.price_per_day) {
+                out.price_per_day = p;
+              }
             }
           }
         }

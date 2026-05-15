@@ -123,12 +123,15 @@ export function parseBoataroundHtml(html: string): Enriched {
       const items = Array.isArray(data) ? data : [data];
       for (const item of items) {
         if (item?.offers) {
+          // Boataround's JSON-LD Offer always carries the "ab X €/Tag"
+          // daily anchor — verified on Bali 48 Terra (680) and Lagoon 77
+          // Twin Flame (10487). Previously we wrongly bucketed >5000 as
+          // weekly, which hid prices for premium yachts entirely.
           const offers = Array.isArray(item.offers) ? item.offers : [item.offers];
           for (const o of offers) {
             const p = parseFloat(o.price || o.lowPrice || "");
-            if (!isNaN(p) && p > 0) {
-              if (p < 5000) out.price_per_day = p;
-              else out.price_per_week = p;
+            if (!isNaN(p) && p > 0 && (out.price_per_day == null || p < out.price_per_day)) {
+              out.price_per_day = p;
             }
           }
         }
