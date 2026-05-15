@@ -137,7 +137,6 @@ interface ParsedBoat {
   source: string;
   status: string;
   verified: boolean;
-  material: string | null;
 }
 
 function parsePage(html: string, url: string): ParsedBoat | null {
