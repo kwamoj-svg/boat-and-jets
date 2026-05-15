@@ -446,6 +446,26 @@ export async function searchCharterBoats(opts: {
     }
     if (!data) return [];
 
+    // Fire-and-forget lazy enrichment for visible NULL-price Boataround boats
+    // — so /api/search also fills the catalog over time, not just /api/charter.
+    try {
+      const enrichTargets = (data as Array<Record<string, unknown>>)
+        .filter(
+          (b) =>
+            b.source === "boataround_sitemap" &&
+            b.price_per_day == null &&
+            b.detail_url
+        )
+        .slice(0, 6)
+        .map((b) => ({ id: String(b.id), detail_url: String(b.detail_url) }));
+      if (enrichTargets.length > 0) {
+        // Dynamic import — keeps search hot path free of the enrich module
+        import("./boataround-enrich")
+          .then(({ enrichBoatsBackground }) => enrichBoatsBackground(enrichTargets, enrichTargets.length))
+          .catch(() => { /* ignore */ });
+      }
+    } catch { /* never block search on enrichment */ }
+
     // Convert to ExtractedListing format
     return data.map((boat: Record<string, unknown>) => {
       const company = boat.charter_companies as Record<string, unknown> | null;
