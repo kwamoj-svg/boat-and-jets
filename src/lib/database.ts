@@ -361,7 +361,7 @@ export async function searchCharterBoats(opts: {
         catamaran: ["catamaran"],
         katamaran: ["catamaran"],
         gulet: ["gulet"],
-        yacht: ["yacht"], // narrow: explicitly tagged motor/sailing yachts only — generic "yacht" used to match everything and made results meaningless
+        yacht: ["yacht", "motorboat"], // Boataround tags most motor yachts as "motorboat"; combining gives users a meaningful "Yacht" filter until length_m is widely backfilled
         speedboat: ["speedboat", "motorboat"],
         houseboat: ["houseboat"],
         jetski: ["jet_ski"],
