@@ -147,9 +147,10 @@ export async function GET(req: NextRequest) {
   if (!sitemapXml) return NextResponse.json({ error: "Could not fetch sitemap" }, { status: 502 });
 
   const urls: string[] = [];
+  const JUNK_PREFIXES = /\/boats\/(boattrailer|boatengine|boatequipment|boatelectronics|boatpart)/;
   const locMatches = sitemapXml.matchAll(/<loc>([^<]+)<\/loc>/g);
   for (const m of locMatches) {
-    if (/\/boat-market\/boats\//.test(m[1])) urls.push(m[1].trim());
+    if (/\/boat-market\/boats\//.test(m[1]) && !JUNK_PREFIXES.test(m[1])) urls.push(m[1].trim());
   }
 
   if (urls.length === 0) {

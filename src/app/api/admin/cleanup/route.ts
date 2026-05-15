@@ -148,6 +148,40 @@ export async function GET(req: NextRequest) {
     report.errors.push(`sale_boats names: ${e}`);
   }
 
+  // 3b) Delete non-boat junk from sale_boats (trailers, engines, equipment)
+  let saleJunkDeleted = 0;
+  try {
+    for (const prefix of ["scanboat-boattrailer", "scanboat-boatengine", "scanboat-boatequipment", "scanboat-boatelectronics", "scanboat-boatpart"]) {
+      const { error, count } = await db
+        .from("sale_boats")
+        .delete({ count: "exact" })
+        .like("slug", `${prefix}%`);
+      if (!error) saleJunkDeleted += count ?? 0;
+    }
+  } catch (e) {
+    report.errors.push(`sale junk: ${e}`);
+  }
+
+  // 3c) Delete sold boats from sale_boats
+  let saleSoldDeleted = 0;
+  try {
+    const { data: soldRows } = await db
+      .from("sale_boats")
+      .select("id, name")
+      .limit(5000);
+    const toDelete: string[] = [];
+    for (const row of (soldRows as { id: string; name: string }[] | null) || []) {
+      if (/\b(solgt|sold|verkauft|vendu|vendido)\b/i.test(row.name)) toDelete.push(row.id);
+    }
+    for (let i = 0; i < toDelete.length; i += 100) {
+      const batch = toDelete.slice(i, i + 100);
+      const { error } = await db.from("sale_boats").delete().in("id", batch);
+      if (!error) saleSoldDeleted += batch.length;
+    }
+  } catch (e) {
+    report.errors.push(`sale sold: ${e}`);
+  }
+
   // 4) Delete completely useless rows (no price AND no images AND no description AND auto-scraped)
   try {
     const { error, count } = await db
@@ -195,6 +229,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     ...report,
+    saleJunkDeleted,
+    saleSoldDeleted,
     duplicatesDeleted: dedupedCount,
   });
 }
