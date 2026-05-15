@@ -19,7 +19,9 @@ import {
   type CrmStatus,
   updateCrmEntry,
   deleteCrmEntry,
+  addToCrm,
 } from "@/app/actions/crm";
+import { Plus, Search, Filter } from "lucide-react";
 
 const STATUSES: { key: CrmStatus; label: string; color: string }[] = [
   { key: "interested", label: "Interessiert", color: "bg-blue-500/20 text-blue-300 border-blue-500/20" },
@@ -34,62 +36,133 @@ const STATUSES: { key: CrmStatus; label: string; color: string }[] = [
 export function CrmBoard({ entries }: { entries: CrmEntry[] }) {
   const [view, setView] = useState<"kanban" | "list">("kanban");
   const [editing, setEditing] = useState<CrmEntry | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [search, setSearch] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | "low" | "medium" | "high">("all");
+  const [showDueOnly, setShowDueOnly] = useState(false);
+
+  const filtered = entries.filter((e) => {
+    if (priorityFilter !== "all" && e.priority !== priorityFilter) return false;
+    if (showDueOnly) {
+      const due = e.reminder_date && !e.reminder_done && new Date(e.reminder_date) <= new Date();
+      if (!due) return false;
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const hay = `${e.boat_name} ${e.company_name ?? ""} ${e.contact_name ?? ""} ${e.notes ?? ""}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
 
   const grouped = STATUSES.reduce(
-    (acc, s) => ({ ...acc, [s.key]: entries.filter((e) => e.status === s.key) }),
+    (acc, s) => ({ ...acc, [s.key]: filtered.filter((e) => e.status === s.key) }),
     {} as Record<CrmStatus, CrmEntry[]>
   );
 
   return (
     <>
-      {/* View toggle */}
-      <div className="flex items-center gap-2 mb-6">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setView("kanban")}
+            className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+              view === "kanban"
+                ? "bg-gold/20 text-gold border border-gold/20"
+                : "bg-white/[0.03] text-gray-400 border border-white/5 hover:text-white"
+            }`}
+          >
+            Pipeline
+          </button>
+          <button
+            onClick={() => setView("list")}
+            className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+              view === "list"
+                ? "bg-gold/20 text-gold border border-gold/20"
+                : "bg-white/[0.03] text-gray-400 border border-white/5 hover:text-white"
+            }`}
+          >
+            Liste
+          </button>
+        </div>
+
+        <div className="flex-1 min-w-[260px] flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Suche Boot, Anbieter, Notizen..."
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg bg-white/[0.03] border border-white/5 text-white placeholder:text-gray-600 focus:outline-none focus:border-gold/30"
+            />
+          </div>
+          <div className="relative">
+            <Filter className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value as typeof priorityFilter)}
+              className="pl-9 pr-7 py-2 text-sm rounded-lg bg-white/[0.03] border border-white/5 text-white focus:outline-none focus:border-gold/30 appearance-none"
+            >
+              <option value="all">Alle Prioritäten</option>
+              <option value="high">Hoch</option>
+              <option value="medium">Mittel</option>
+              <option value="low">Niedrig</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-gray-400 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:text-white">
+            <input
+              type="checkbox"
+              checked={showDueOnly}
+              onChange={(e) => setShowDueOnly(e.target.checked)}
+              className="accent-gold"
+            />
+            Nur fällige Reminder
+          </label>
+        </div>
+
         <button
-          onClick={() => setView("kanban")}
-          className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-            view === "kanban"
-              ? "bg-gold/20 text-gold border border-gold/20"
-              : "bg-white/[0.03] text-gray-400 border border-white/5 hover:text-white"
-          }`}
+          onClick={() => setAdding(true)}
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-gold/90 hover:bg-gold text-navy text-sm font-medium rounded-lg transition-colors shrink-0 ml-auto"
         >
-          Pipeline
-        </button>
-        <button
-          onClick={() => setView("list")}
-          className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-            view === "list"
-              ? "bg-gold/20 text-gold border border-gold/20"
-              : "bg-white/[0.03] text-gray-400 border border-white/5 hover:text-white"
-          }`}
-        >
-          Liste
+          <Plus className="w-4 h-4" />
+          Neu hinzufügen
         </button>
       </div>
 
+      {filtered.length === 0 && entries.length > 0 && (
+        <div className="text-center py-10 text-sm text-gray-500 bg-white/[0.02] border border-white/5 rounded-xl mb-6">
+          Keine Treffer für die aktuellen Filter.
+        </div>
+      )}
+
       {view === "kanban" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 overflow-x-auto">
-          {STATUSES.map((s) => (
-            <div
-              key={s.key}
-              className="bg-white/[0.02] border border-white/5 rounded-xl p-3 min-w-[220px]"
-            >
-              <div className={`text-xs font-medium px-2 py-1 rounded ${s.color} inline-block mb-3`}>
-                {s.label} · {grouped[s.key].length}
+        <div className="-mx-4 sm:mx-0 overflow-x-auto pb-2">
+          <div className="flex gap-3 px-4 sm:px-0 min-w-min">
+            {STATUSES.map((s) => (
+              <div
+                key={s.key}
+                className="bg-white/[0.02] border border-white/5 rounded-xl p-3 w-[260px] shrink-0 flex flex-col"
+              >
+                <div className={`text-xs font-medium px-2 py-1 rounded ${s.color} inline-block self-start mb-3`}>
+                  {s.label} · {grouped[s.key].length}
+                </div>
+                <div className="space-y-2 flex-1">
+                  {grouped[s.key].map((entry) => (
+                    <CrmCard key={entry.id} entry={entry} onEdit={() => setEditing(entry)} />
+                  ))}
+                  {grouped[s.key].length === 0 && (
+                    <p className="text-xs text-gray-600 italic py-2">Keine Einträge</p>
+                  )}
+                </div>
               </div>
-              <div className="space-y-2">
-                {grouped[s.key].map((entry) => (
-                  <CrmCard key={entry.id} entry={entry} onEdit={() => setEditing(entry)} />
-                ))}
-                {grouped[s.key].length === 0 && (
-                  <p className="text-xs text-gray-600 italic py-2">Keine Einträge</p>
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       ) : (
-        <div className="bg-white/[0.02] border border-white/5 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white/[0.02] border border-white/5 rounded-xl overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-white/[0.03] text-gray-400 text-xs">
               <tr>
                 <th className="text-left p-3">Boot</th>
@@ -101,7 +174,7 @@ export function CrmBoard({ entries }: { entries: CrmEntry[] }) {
               </tr>
             </thead>
             <tbody>
-              {entries.map((e) => (
+              {filtered.map((e) => (
                 <CrmRow key={e.id} entry={e} onEdit={() => setEditing(e)} />
               ))}
             </tbody>
@@ -110,6 +183,7 @@ export function CrmBoard({ entries }: { entries: CrmEntry[] }) {
       )}
 
       {editing && <CrmEditModal entry={editing} onClose={() => setEditing(null)} />}
+      {adding && <CrmAddModal onClose={() => setAdding(false)} />}
     </>
   );
 }
@@ -483,6 +557,122 @@ function CrmEditModal({ entry, onClose }: { entry: CrmEntry; onClose: () => void
           border-color: rgba(200, 165, 90, 0.4);
         }
       `}</style>
+    </div>
+  );
+}
+
+function CrmAddModal({ onClose }: { onClose: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [boatName, setBoatName] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function submit() {
+    setError(null);
+    if (!boatName.trim()) {
+      setError("Boot-Name ist Pflicht");
+      return;
+    }
+    startTransition(async () => {
+      const res = await addToCrm({
+        boat_name: boatName.trim(),
+        source_url: sourceUrl.trim() || `manual://${Date.now()}`,
+        notes: [companyName && `Anbieter: ${companyName}`, notes].filter(Boolean).join("\n\n") || undefined,
+      });
+      if (res?.error) {
+        setError(res.error);
+        return;
+      }
+      onClose();
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-navy border border-white/10 rounded-2xl max-w-lg w-full p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-5">
+          <h2 className="text-white text-xl font-light">Neuer CRM-Eintrag</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+
+        <div className="space-y-4">
+          <Field label="Boot-Name *">
+            <input
+              type="text"
+              value={boatName}
+              onChange={(e) => setBoatName(e.target.value)}
+              className="input"
+              placeholder="z.B. Lagoon 46"
+              autoFocus
+            />
+          </Field>
+          <Field label="Quell-URL (optional)">
+            <input
+              type="url"
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
+              className="input"
+              placeholder="https://..."
+            />
+          </Field>
+          <Field label="Anbieter / Firma">
+            <input
+              type="text"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              className="input"
+              placeholder="z.B. SunSail"
+            />
+          </Field>
+          <Field label="Notizen">
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="input resize-none"
+              placeholder="Erste Gedanken, Kontaktinfo, Konditionen..."
+            />
+          </Field>
+          {error && <p className="text-sm text-red-400">{error}</p>}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 mt-6 pt-5 border-t border-white/5">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+            Abbrechen
+          </button>
+          <button
+            onClick={submit}
+            disabled={pending}
+            className="px-5 py-2 bg-gold/90 hover:bg-gold text-navy text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+          >
+            {pending ? "Anlegen..." : "Anlegen"}
+          </button>
+        </div>
+
+        <style jsx>{`
+          :global(.input) {
+            width: 100%;
+            padding: 0.55rem 0.75rem;
+            border-radius: 0.5rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: white;
+            font-size: 0.875rem;
+          }
+          :global(.input:focus) {
+            outline: none;
+            border-color: rgba(200, 165, 90, 0.4);
+          }
+        `}</style>
+      </div>
     </div>
   );
 }

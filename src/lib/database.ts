@@ -361,7 +361,7 @@ export async function searchCharterBoats(opts: {
         catamaran: ["catamaran"],
         katamaran: ["catamaran"],
         gulet: ["gulet"],
-        yacht: ["yacht", "motorboat", "sailboat", "catamaran"], // generic — match all luxury
+        yacht: ["yacht"], // narrow: explicitly tagged motor/sailing yachts only — generic "yacht" used to match everything and made results meaningless
         speedboat: ["speedboat", "motorboat"],
         houseboat: ["houseboat"],
         jetski: ["jet_ski"],
@@ -406,10 +406,11 @@ export async function searchCharterBoats(opts: {
       query = query.or(`price_per_day.lte.${Math.round(opts.budgetPerDay * 1.3)},price_per_day.is.null`);
     }
 
-    // Free-text search — only apply if no structured filters already matched
-    // (otherwise it over-restricts: "Segelboot Kroatien" already filters by
-    // boat_type=sailboat AND country=Croatia, no need to also require those
-    // words in name/brand/etc.)
+    // Free-text search — apply only when we have NO structured filters.
+    // With structured filters, the location OR already includes country.is.null
+    // (Boataround sitemap has no country/region/port), so combining it with a
+    // free-text OR that requires the query word to appear in name/desc nukes
+    // every result. Free-text is best-effort fallback only.
     const hasStructuredFilters = !!(
       opts.boatType || opts.country || opts.region || opts.city || opts.guests
     );

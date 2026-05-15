@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkCronKillSwitch } from "@/lib/cron-guard";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export const maxDuration = 300;
+export const dynamic = "force-dynamic";
 
 /**
  * TheYachtMarket.com scraper.
@@ -220,6 +222,9 @@ function parsePage(html: string, url: string): ParsedBoat | null {
 }
 
 export async function GET(req: NextRequest) {
+  const kill = checkCronKillSwitch(req.nextUrl.searchParams);
+  if (kill) return kill;
+
   const secret = req.headers.get("x-cron-secret") || req.nextUrl.searchParams.get("secret");
   const expected = process.env.CRON_SECRET || "veliqa-scrape-2024";
   if (secret !== expected) {

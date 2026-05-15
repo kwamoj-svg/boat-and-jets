@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { checkCronKillSwitch } from "@/lib/cron-guard";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { scrapeAllPlatforms } from "@/lib/platform-scrapers";
 import type { ExtractedListing } from "@/lib/claude-ai";
@@ -240,6 +241,8 @@ async function getOrCreateScrapeCompany(
 }
 
 export async function GET(req: NextRequest) {
+  const kill = checkCronKillSwitch(req.nextUrl.searchParams);
+  if (kill) return kill;
   // Auth: require secret OR Render's cron user-agent
   const secret = req.headers.get("x-cron-secret") || req.nextUrl.searchParams.get("secret");
   const expectedSecret = process.env.CRON_SECRET || "veliqa-scrape-2024";

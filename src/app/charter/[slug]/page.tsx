@@ -208,13 +208,21 @@ export default function BoatDetailPage() {
 
       <div className="pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
         {/* Back link */}
-        <Link
-          href="/charter"
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gold-light transition-colors mb-6"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Zurück zum Katalog
-        </Link>
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <Link
+            href="/charter"
+            className="inline-flex items-center gap-1.5 text-sm text-gold-light hover:text-gold transition-colors px-3 py-1.5 rounded-lg border border-gold/30 bg-gold/5"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Zurück zum Katalog
+          </Link>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            Startseite
+          </Link>
+        </div>
 
         {/* Hero Image */}
         <div className="glass rounded-2xl border border-white/10 overflow-hidden mb-6">
@@ -436,7 +444,7 @@ export default function BoatDetailPage() {
           {/* Right column: Company Card */}
           <div className="space-y-6">
             {company && (
-              <div className="glass rounded-2xl p-6 border border-white/10 sticky top-24">
+              <div className="glass rounded-2xl p-6 border border-white/10 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
                 <h3 className="text-lg font-light text-white mb-4">Anbieter</h3>
 
                 <div className="flex items-center gap-3 mb-3">
@@ -527,11 +535,6 @@ export default function BoatDetailPage() {
                   Jetzt buchen bei {boat.source === "boataround_sitemap" ? "Boataround" : boat.source === "samboat_sitemap" ? "Samboat" : (() => { try { return new URL(boat.detail_url!).hostname.replace("www.", "").split(".")[0]; } catch { return "Anbieter"; } })()}
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
-                {(boat.source === "boataround_sitemap" || boat.source === "samboat_sitemap") && (
-                  <p className="text-[10px] text-gray-500 mt-2 text-center">
-                    Affiliate-Partner — VELIQA erhält ggf. eine Provision
-                  </p>
-                )}
               </div>
             )}
           </div>

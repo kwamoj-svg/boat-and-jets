@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Ruler, MapPin, Sparkles, ExternalLink, Anchor, Info } from "lucide-react";
+import { Users, Ruler, MapPin, Sparkles, ExternalLink, Anchor } from "lucide-react";
 import { formatPrice } from "@/lib/format";
 import type { ExtractedListing } from "@/lib/claude-ai";
 import { AddToCrmButton } from "./AddToCrmButton";
@@ -208,11 +208,6 @@ export function ListingCard({ listing, index }: { listing: ExtractedListing; ind
             </span>
           </div>
 
-          {/* Affiliate disclosure */}
-          <div className="flex items-center gap-1 mt-2 text-[10px] text-gray-500/70">
-            <Info className="w-2.5 h-2.5 shrink-0" />
-            <span>Affiliate-Link — ggf. Provision</span>
-          </div>
         </div>
       </article>
     </a>
