@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { enrichBoatsBackground } from "@/lib/boataround-enrich";
+// Kept import path stable; enrichBoataroundBoat is now imported lazily
+// inline below to keep cold-start light.
 
 function getDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -240,22 +241,52 @@ async function handleGet(req: NextRequest) {
       return Response.json({ error: error.message }, { status: 500 });
     }
 
-    // Fire-and-forget enrichment for the first few null-price rows in this
-    // page. Each user visit slowly fills the catalog with prices+specs
-    // pulled from Boataround detail pages — no manual CRON trigger needed.
-    type EnrichRow = { id: string; detail_url: string | null; price_per_day: number | null };
-    const enrichTargets = ((data as EnrichRow[] | null) || [])
+    // Inline enrichment — Render serverless kills background promises as
+    // soon as the response is sent, so fire-and-forget never finishes.
+    // Block for up to 4s total to enrich the first 2 NULL-price rows of
+    // this page. Returns enriched data in the same response.
+    type EnrichRow = {
+      id: string;
+      detail_url: string | null;
+      price_per_day: number | null;
+      [key: string]: unknown;
+    };
+    const rows = (data as EnrichRow[] | null) || [];
+    const enrichTargets = rows
       .filter((b) => b.price_per_day == null && b.detail_url)
-      .slice(0, 6);
+      .slice(0, 2);
+
     if (enrichTargets.length > 0) {
-      enrichBoatsBackground(
-        enrichTargets.map((b) => ({ id: b.id, detail_url: b.detail_url })),
-        enrichTargets.length
-      );
+      try {
+        const { enrichBoataroundBoat } = await import("@/lib/boataround-enrich");
+        await Promise.race([
+          Promise.allSettled(
+            enrichTargets.map((b) =>
+              enrichBoataroundBoat(String(b.id), String(b.detail_url))
+            )
+          ),
+          new Promise((resolve) => setTimeout(resolve, 4000)),
+        ]);
+        // Re-fetch ONLY the enriched rows so the response reflects fresh data
+        const enrichedIds = enrichTargets.map((b) => String(b.id));
+        const { data: fresh } = await db
+          .from("charter_boats")
+          .select("*, charter_companies(company_name, slug, country)")
+          .in("id", enrichedIds);
+        if (fresh) {
+          const freshMap = new Map<string, unknown>(
+            (fresh as { id: string }[]).map((r) => [r.id, r])
+          );
+          for (let i = 0; i < rows.length; i++) {
+            const f = freshMap.get(rows[i].id);
+            if (f) rows[i] = f as EnrichRow;
+          }
+        }
+      } catch { /* never block catalog on enrichment error */ }
     }
 
     return Response.json({
-      results: data || [],
+      results: rows,
       total: count ?? 0,
       page,
       filters: { type, country, region, minGuests, maxPrice, brand, companyId, q },

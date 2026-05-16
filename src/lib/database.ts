@@ -446,8 +446,9 @@ export async function searchCharterBoats(opts: {
     }
     if (!data) return [];
 
-    // Fire-and-forget lazy enrichment for visible NULL-price Boataround boats
-    // — so /api/search also fills the catalog over time, not just /api/charter.
+    // Inline enrichment with budget: Render kills background promises, so
+    // fire-and-forget never finishes. Block synchronously for up to 4s on
+    // 2 NULL-price rows. Returned listings reflect fresh DB state.
     try {
       const enrichTargets = (data as Array<Record<string, unknown>>)
         .filter(
@@ -456,13 +457,33 @@ export async function searchCharterBoats(opts: {
             b.price_per_day == null &&
             b.detail_url
         )
-        .slice(0, 6)
-        .map((b) => ({ id: String(b.id), detail_url: String(b.detail_url) }));
+        .slice(0, 2);
       if (enrichTargets.length > 0) {
-        // Dynamic import — keeps search hot path free of the enrich module
-        import("./boataround-enrich")
-          .then(({ enrichBoatsBackground }) => enrichBoatsBackground(enrichTargets, enrichTargets.length))
-          .catch(() => { /* ignore */ });
+        const { enrichBoataroundBoat } = await import("./boataround-enrich");
+        await Promise.race([
+          Promise.allSettled(
+            enrichTargets.map((b) =>
+              enrichBoataroundBoat(String(b.id), String(b.detail_url))
+            )
+          ),
+          new Promise((resolve) => setTimeout(resolve, 4000)),
+        ]);
+        // Re-read the freshly enriched rows so the response sees them
+        const ids = enrichTargets.map((b) => String(b.id));
+        const { data: fresh } = await db
+          .from("charter_boats")
+          .select("*, charter_companies(company_name, slug, country, city, website, email, phone)")
+          .in("id", ids);
+        if (fresh) {
+          const freshMap = new Map<string, Record<string, unknown>>(
+            (fresh as { id: string }[]).map((r) => [r.id, r as unknown as Record<string, unknown>])
+          );
+          const arr = data as Array<Record<string, unknown>>;
+          for (let i = 0; i < arr.length; i++) {
+            const f = freshMap.get(String(arr[i].id));
+            if (f) arr[i] = f;
+          }
+        }
       }
     } catch { /* never block search on enrichment */ }
 
