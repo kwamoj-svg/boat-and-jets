@@ -114,28 +114,39 @@ export function parseBoataroundHtml(html: string): Enriched {
     features: null,
   };
 
-  // 1) JSON-LD Offer + description
+  // 1) JSON-LD Offer + description — Boataround wraps everything in @graph:
+  //    {"@graph":[{BreadcrumbList},{Product, offers:{...}}]}
+  //    so we recursively flatten before scanning.
+  function flatten(node: unknown, acc: Record<string, unknown>[] = []): Record<string, unknown>[] {
+    if (Array.isArray(node)) {
+      for (const v of node) flatten(v, acc);
+    } else if (node && typeof node === "object") {
+      const obj = node as Record<string, unknown>;
+      acc.push(obj);
+      if (obj["@graph"]) flatten(obj["@graph"], acc);
+    }
+    return acc;
+  }
+
   const jsonLdRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let m;
   while ((m = jsonLdRe.exec(html)) !== null) {
     try {
       const data = JSON.parse(m[1]);
-      const items = Array.isArray(data) ? data : [data];
-      for (const item of items) {
-        if (item?.offers) {
-          // Boataround's JSON-LD Offer always carries the "ab X €/Tag"
-          // daily anchor — verified on Bali 48 Terra (680) and Lagoon 77
-          // Twin Flame (10487). Previously we wrongly bucketed >5000 as
-          // weekly, which hid prices for premium yachts entirely.
+      for (const item of flatten(data)) {
+        if (item.offers) {
+          // Boataround's Offer always carries the "ab X €/Tag" daily anchor —
+          // verified on Bali 48 Terra (680), Lagoon 77 (10487), Pegazus
+          // Escapade 600 (94). Take the lowest if multiple seasonal offers.
           const offers = Array.isArray(item.offers) ? item.offers : [item.offers];
-          for (const o of offers) {
-            const p = parseFloat(o.price || o.lowPrice || "");
+          for (const o of offers as Record<string, unknown>[]) {
+            const p = parseFloat(String(o.price || o.lowPrice || ""));
             if (!isNaN(p) && p > 0 && (out.price_per_day == null || p < out.price_per_day)) {
               out.price_per_day = p;
             }
           }
         }
-        if (item?.description && !out.description) {
+        if (item.description && !out.description) {
           out.description = String(item.description);
         }
       }
@@ -202,8 +213,8 @@ export function parseBoataroundHtml(html: string): Enriched {
   }
   if (features.length > 0) out.features = Array.from(new Set(features));
 
-  // Sanity-check
-  if (out.price_per_day && (out.price_per_day < 30 || out.price_per_day > 100000)) {
+  // Sanity-check — drop only absurd values
+  if (out.price_per_day && (out.price_per_day < 10 || out.price_per_day > 100000)) {
     out.price_per_day = null;
   }
   if (out.price_per_week && (out.price_per_week < 200 || out.price_per_week > 500000)) {
