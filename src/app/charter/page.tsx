@@ -357,9 +357,13 @@ export default function CharterCatalogPage() {
   const [boatType, setBoatType] = useState("");
   const [region, setRegion] = useState("");
   const [maxGuests, setMaxGuests] = useState("");
+  const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [search, setSearch] = useState("");
   const [skipperOnly, setSkipperOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<"default" | "price-asc" | "price-desc" | "newest" | "guests-desc">(
+    "default"
+  );
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const fetchBoats = useCallback(async () => {
@@ -368,7 +372,9 @@ export default function CharterCatalogPage() {
     if (boatType) params.set("type", boatType);
     if (region) params.set("region", region);
     if (maxGuests) params.set("minGuests", maxGuests);
+    if (minPrice) params.set("minPrice", minPrice);
     if (maxPrice) params.set("maxPrice", maxPrice);
+    if (sortBy !== "default") params.set("sort", sortBy);
     if (search) params.set("q", search);
 
     try {
@@ -391,7 +397,7 @@ export default function CharterCatalogPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, boatType, region, maxGuests, maxPrice, search, skipperOnly]);
+  }, [page, boatType, region, maxGuests, minPrice, maxPrice, sortBy, search, skipperOnly]);
 
   useEffect(() => {
     fetchBoats();
@@ -400,7 +406,7 @@ export default function CharterCatalogPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1);
-  }, [boatType, region, maxGuests, maxPrice, search, skipperOnly]);
+  }, [boatType, region, maxGuests, minPrice, maxPrice, sortBy, search, skipperOnly]);
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
@@ -488,15 +494,26 @@ export default function CharterCatalogPage() {
               className="bg-white/5 border border-white/10 rounded-lg text-white text-sm px-3 py-2.5 focus:outline-none focus:border-gold/30 placeholder-gray-600"
             />
 
-            {/* Max Price */}
-            <input
-              type="number"
-              placeholder={t("charter.maxPricePerDay")}
-              min={0}
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-lg text-white text-sm px-3 py-2.5 focus:outline-none focus:border-gold/30 placeholder-gray-600"
-            />
+            {/* Price range — min + max in one cell */}
+            <div className="flex items-stretch gap-1 bg-white/5 border border-white/10 rounded-lg overflow-hidden focus-within:border-gold/30">
+              <input
+                type="number"
+                placeholder="Min €/Tag"
+                min={0}
+                value={minPrice}
+                onChange={(e) => setMinPrice(e.target.value)}
+                className="w-1/2 bg-transparent text-white text-sm px-3 py-2.5 focus:outline-none placeholder-gray-600 tabular-nums"
+              />
+              <span className="text-gray-600 self-center" aria-hidden>–</span>
+              <input
+                type="number"
+                placeholder="Max €/Tag"
+                min={0}
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+                className="w-1/2 bg-transparent text-white text-sm px-3 py-2.5 focus:outline-none placeholder-gray-600 tabular-nums"
+              />
+            </div>
           </div>
 
           {/* Second row: Skipper toggle */}
@@ -513,15 +530,33 @@ export default function CharterCatalogPage() {
               {t("charter.onlyWithSkipper")}
             </button>
 
-            {(boatType || region || maxGuests || maxPrice || search || skipperOnly) && (
+            {/* Sort */}
+            <label className="flex items-center gap-2 text-xs text-gray-400">
+              <span className="uppercase tracking-wider">Sortieren</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                className="bg-white/5 border border-white/10 rounded-lg text-white text-sm px-3 py-1.5 focus:outline-none focus:border-gold/30 appearance-none"
+              >
+                <option value="default" className="bg-navy">Empfohlen</option>
+                <option value="price-asc" className="bg-navy">Preis aufsteigend</option>
+                <option value="price-desc" className="bg-navy">Preis absteigend</option>
+                <option value="guests-desc" className="bg-navy">Größte Crew zuerst</option>
+                <option value="newest" className="bg-navy">Neueste zuerst</option>
+              </select>
+            </label>
+
+            {(boatType || region || maxGuests || minPrice || maxPrice || search || skipperOnly || sortBy !== "default") && (
               <button
                 onClick={() => {
                   setBoatType("");
                   setRegion("");
                   setMaxGuests("");
+                  setMinPrice("");
                   setMaxPrice("");
                   setSearch("");
                   setSkipperOnly(false);
+                  setSortBy("default");
                 }}
                 className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
               >

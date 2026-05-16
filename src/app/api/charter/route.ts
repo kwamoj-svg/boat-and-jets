@@ -186,16 +186,30 @@ async function handleGet(req: NextRequest) {
     const country = searchParams.get("country");
     const region = searchParams.get("region");
     const minGuests = searchParams.get("minGuests");
+    const minPrice = searchParams.get("minPrice");
     const maxPrice = searchParams.get("maxPrice");
+    const sort = searchParams.get("sort") || "default";
     const brand = searchParams.get("brand");
     const companyId = searchParams.get("company_id");
+
+    // Sort handling
+    const orderConfig: { column: string; ascending: boolean; nullsFirst: boolean } =
+      sort === "price-asc"
+        ? { column: "price_per_day", ascending: true, nullsFirst: false }
+        : sort === "price-desc"
+        ? { column: "price_per_day", ascending: false, nullsFirst: false }
+        : sort === "guests-desc"
+        ? { column: "max_guests", ascending: false, nullsFirst: false }
+        : sort === "newest"
+        ? { column: "created_at", ascending: false, nullsFirst: false }
+        : { column: "price_per_day", ascending: true, nullsFirst: false }; // default
 
     let query = db
       .from("charter_boats")
       .select("*, charter_companies(company_name, slug, country)", { count: "exact" })
       .eq("status", "active")
       .eq("source", "boataround_sitemap") // Only Boataround boats — affiliate phase
-      .order("price_per_day", { ascending: true, nullsFirst: false })
+      .order(orderConfig.column, { ascending: orderConfig.ascending, nullsFirst: orderConfig.nullsFirst })
       .range(from, from + limit - 1);
 
     if (type) query = query.eq("boat_type", type);
@@ -222,6 +236,14 @@ async function handleGet(req: NextRequest) {
       const n = parseFloat(maxPrice);
       if (!isNaN(n)) {
         query = query.or(`price_per_day.lte.${n},price_per_day.is.null`);
+      }
+    }
+    if (minPrice) {
+      const n = parseFloat(minPrice);
+      if (!isNaN(n) && n > 0) {
+        // Strict min — explicit min-price means the user wants priced rows
+        // above that threshold, not the unknown-price tier.
+        query = query.gte("price_per_day", n);
       }
     }
     if (brand) query = query.ilike("brand", `%${brand}%`);
