@@ -254,18 +254,21 @@ async function handleGet(req: NextRequest) {
     const rows = (data as EnrichRow[] | null) || [];
     const enrichTargets = rows
       .filter((b) => b.price_per_day == null && b.detail_url)
-      .slice(0, 2);
+      .slice(0, 10);
 
     if (enrichTargets.length > 0) {
       try {
         const { enrichBoataroundBoat } = await import("@/lib/boataround-enrich");
+        // Up to 25s budget for 10 boats — fetches run with concurrency 6
+        // inside enrichBoataroundBoat-batch via Promise.allSettled, so 10
+        // fits well within the timeout.
         await Promise.race([
           Promise.allSettled(
             enrichTargets.map((b) =>
               enrichBoataroundBoat(String(b.id), String(b.detail_url))
             )
           ),
-          new Promise((resolve) => setTimeout(resolve, 4000)),
+          new Promise((resolve) => setTimeout(resolve, 25000)),
         ]);
         // Re-fetch ONLY the enriched rows so the response reflects fresh data
         const enrichedIds = enrichTargets.map((b) => String(b.id));
