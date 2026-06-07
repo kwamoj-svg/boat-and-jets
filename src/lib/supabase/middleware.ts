@@ -29,27 +29,20 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Refresh session (important!)
+  // Refresh session cookies — important for keeping admins logged in,
+  // but we no longer enforce auth at the middleware layer. The whole
+  // site is public; individual server routes (e.g. /api/admin/*) do
+  // their own role checks.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Public pages that don't require login
-  const publicPaths = ["/login", "/signup", "/auth", "/impressum", "/datenschutz"];
-  const isPublic = publicPaths.some((p) =>
-    request.nextUrl.pathname === p || request.nextUrl.pathname.startsWith(p + "/")
-  );
-
-  // Redirect unauthenticated users to login (except public pages)
-  if (!isPublic && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("redirect", request.nextUrl.pathname + request.nextUrl.search);
-    return NextResponse.redirect(url);
-  }
-
-  // Redirect logged-in users away from login/signup to dashboard
-  if (isPublic && user && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup")) {
+  // Quality-of-life: send logged-in users straight to their dashboard
+  // if they land on /login or /signup. Visitors stay where they are.
+  if (
+    user &&
+    (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup")
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
