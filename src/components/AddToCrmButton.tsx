@@ -22,13 +22,26 @@ export function AddToCrmButton({ listing, variant = "compact" }: Props) {
   const { t } = useT();
   const [pending, startTransition] = useTransition();
   const [added, setAdded] = useState(false);
-  const [needsLogin, setNeedsLogin] = useState(false);
 
   // Reset state when listing changes (different boat)
   useEffect(() => {
     setAdded(false);
-    setNeedsLogin(false);
   }, [listing.source_url]);
+
+  function saveLocal() {
+    try {
+      const list: unknown[] = JSON.parse(localStorage.getItem("veliqa:crm-local") || "[]");
+      list.unshift({
+        boat_name: listing.name,
+        source_url: listing.source_url,
+        image_url: listing.image_url ?? null,
+        savedAt: new Date().toISOString(),
+      });
+      localStorage.setItem("veliqa:crm-local", JSON.stringify(list.slice(0, 100)));
+    } catch {
+      /* private mode / quota */
+    }
+  }
 
   function handleClick(e: React.MouseEvent) {
     e.preventDefault();
@@ -36,33 +49,21 @@ export function AddToCrmButton({ listing, variant = "compact" }: Props) {
     if (added || pending) return;
 
     startTransition(async () => {
-      const res = await addToCrm({
-        boat_name: listing.name,
-        source_url: listing.source_url,
-        image_url: listing.image_url ?? undefined,
-        boat_data: listing as unknown as Record<string, unknown>,
-      });
-      if (res.error) {
-        if (res.error.toLowerCase().includes("auth")) {
-          setNeedsLogin(true);
+      try {
+        const res = await addToCrm({
+          boat_name: listing.name,
+          source_url: listing.source_url,
+          image_url: listing.image_url ?? undefined,
+          boat_data: listing as unknown as Record<string, unknown>,
+        });
+        if (res.error && res.error.toLowerCase().includes("auth")) {
+          saveLocal();
         }
-        return;
+      } catch {
+        saveLocal();
       }
       setAdded(true);
     });
-  }
-
-  if (needsLogin) {
-    return (
-      <a
-        href={`/login?redirect=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "/")}`}
-        onClick={(e) => e.stopPropagation()}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs hover:bg-amber-500/20 transition-colors"
-      >
-        <Bookmark className="w-3 h-3" />
-        {t("crm.loginToSave")}
-      </a>
-    );
   }
 
   const Icon = pending ? Loader2 : added ? BookmarkCheck : Bookmark;

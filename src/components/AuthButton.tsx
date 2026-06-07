@@ -40,16 +40,10 @@ export function AuthButton() {
     return <div className="w-8 h-8 rounded-full bg-white/5 animate-pulse" />;
   }
 
+  // Login surface intentionally hidden — no public sign-in flow.
+  // Logged-in admins still get the dropdown; visitors see nothing.
   if (!user) {
-    return (
-      <Link
-        href="/login"
-        className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1.5"
-      >
-        <User className="w-4 h-4" />
-        <span className="hidden sm:inline">Anmelden</span>
-      </Link>
-    );
+    return null;
   }
 
   const name = user.user_metadata?.full_name || user.email?.split("@")[0] || "User";
